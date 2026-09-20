@@ -89,17 +89,14 @@ object QianjiImporter {
         defaultAccountName: String = "钱迹导入"
     ): ImportResult {
         val accountDao = db.accountDao()
-        val accountId = accountDao.observeAll().let { _ ->
-            // 简化：直接查询
-            val existing = accountDao.findByName(defaultAccountName)
-            existing ?: accountDao.insert(
-                com.ledger.app.data.entity.Account(
-                    name = defaultAccountName,
-                    type = "other",
-                    sortOrder = 99
-                )
+        val existing = accountDao.findByName(defaultAccountName)
+        val accountId: Long = existing?.id ?: accountDao.insert(
+            com.ledger.app.data.entity.Account(
+                name = defaultAccountName,
+                type = "other",
+                sortOrder = 99
             )
-        }
+        )
 
         var expense = 0
         var income = 0
@@ -189,16 +186,16 @@ object QianjiImporter {
         val dao = db.categoryDao()
         val parentCat = dao.find(parent, null, type)
             ?: Category(name = parent, parentId = null, type = type, isBuiltin = true).let {
-                dao.insert(it).let { id -> Category(id = id, name = parent, type = type) }
+                val newId = dao.insert(it)
+                Category(id = newId, name = parent, type = type)
             }
         val parentId = parentCat.id
         val childCat = dao.find(child, parentId, type)
-            ?: dao.insert(
-                Category(name = child, parentId = parentId, type = type, isBuiltin = true)
-            ).let { id ->
-                // 返回 id 即可
-            }
-        return (dao.find(child, parentId, type)?.id) ?: childCat
+        if (childCat != null) return childCat.id
+        val newChildId = dao.insert(
+            Category(name = child, parentId = parentId, type = type, isBuiltin = true)
+        )
+        return newChildId
     }
 
     /** "2026-09-20 11:47:57" → "2026-09-20T11:47:57" */

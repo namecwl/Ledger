@@ -17,7 +17,7 @@ object BackupManager {
     /** 导出数据库到指定 Uri */
     suspend fun exportDatabase(context: Context, uri: Uri): Result<Unit> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            runCatching<Unit> {
                 val dbFile = context.getDatabasePath("ledger.db")
                 if (!dbFile.exists()) error("数据库文件不存在")
                 context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -29,7 +29,7 @@ object BackupManager {
     /** 从 Uri 导入数据库覆盖 */
     suspend fun importDatabase(context: Context, uri: Uri): Result<Unit> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            runCatching<Unit> {
                 // 先关闭 Room
                 AppDatabase.close()
 
