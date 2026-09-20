@@ -1,7 +1,3 @@
-
-### `settings.gradle.kts`
-
-```kotlin
 pluginManagement {
     repositories {
         google()
