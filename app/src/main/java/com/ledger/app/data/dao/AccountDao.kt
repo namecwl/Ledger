@@ -24,6 +24,12 @@ interface AccountDao {
     @Query("SELECT * FROM accounts ORDER BY sortOrder, id")
     fun observeAll(): Flow<List<Account>>
 
+    @Query("SELECT * FROM accounts ORDER BY sortOrder, id")
+    suspend fun observeAllOnce(): List<Account>
+
+    @Query("SELECT * FROM accounts WHERE name = :name LIMIT 1")
+    suspend fun findByName(name: String): Account?
+
     @Query("SELECT COUNT(*) FROM accounts")
     suspend fun count(): Int
 }

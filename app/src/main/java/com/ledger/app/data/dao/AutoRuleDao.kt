@@ -14,4 +14,7 @@ interface AutoRuleDao {
 
     @Query("SELECT * FROM auto_rules WHERE enabled = 1 ORDER BY priority DESC")
     suspend fun getEnabled(): List<AutoRule>
+
+    @Query("SELECT COUNT(*) FROM auto_rules")
+    suspend fun count(): Int
 }

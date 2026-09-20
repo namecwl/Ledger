@@ -2,6 +2,7 @@ package com.ledger.app
 
 import android.app.Application
 import com.ledger.app.data.db.AppDatabase
+import com.ledger.app.data.seed.AutoRuleSeeder
 import com.ledger.app.data.seed.CategorySeeder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,9 @@ class LedgerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        appScope.launch { CategorySeeder.seedIfEmpty(db) }
+        appScope.launch {
+            CategorySeeder.seedIfEmpty(db)
+            AutoRuleSeeder.seedIfEmpty(db)
+        }
     }
 }

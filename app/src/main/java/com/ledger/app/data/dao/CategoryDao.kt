@@ -24,6 +24,9 @@ interface CategoryDao {
     @Query("SELECT * FROM categories ORDER BY type, sortOrder, id")
     fun observeAll(): Flow<List<Category>>
 
+    @Query("SELECT * FROM categories ORDER BY type, sortOrder, id")
+    suspend fun observeAllOnce(): List<Category>
+
     @Query("SELECT * FROM categories WHERE parentId IS NULL AND type = :type ORDER BY sortOrder, id")
     suspend fun getTops(type: String): List<Category>
 

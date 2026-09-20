@@ -24,6 +24,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     fun observeAll(): Flow<List<Transaction>>
 
+    @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
+    suspend fun observeAllOnce(): List<Transaction>
+
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getById(id: Long): Transaction?
 
