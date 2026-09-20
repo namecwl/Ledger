@@ -19,6 +19,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val categories: Flow<List<Category>> = repo.observeCategories()
     val accounts: Flow<List<Account>> = repo.observeAccounts()
 
+    // ===== 账单 =====
     fun saveTransaction(t: Transaction) = viewModelScope.launch {
         if (t.id == 0L) repo.addTransaction(t) else repo.updateTransaction(t)
     }
@@ -26,4 +27,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteTransaction(t: Transaction) = viewModelScope.launch {
         repo.deleteTransaction(t)
     }
+
+    // ===== 分类 =====
+    fun addCategory(c: Category) = viewModelScope.launch { repo.addCategory(c) }
+    fun updateCategory(c: Category) = viewModelScope.launch { repo.updateCategory(c) }
+    fun deleteCategory(c: Category) = viewModelScope.launch { repo.deleteCategory(c) }
+
+    // ===== 账户 =====
+    fun addAccount(a: Account) = viewModelScope.launch { repo.addAccount(a) }
+    fun updateAccount(a: Account) = viewModelScope.launch { repo.updateAccount(a) }
+    fun deleteAccount(a: Account) = viewModelScope.launch { repo.deleteAccount(a) }
 }

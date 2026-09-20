@@ -21,7 +21,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.ledger.app.ui.screens.AccountManageScreen
 import com.ledger.app.ui.screens.BillsScreen
+import com.ledger.app.ui.screens.CategoryManageScreen
 import com.ledger.app.ui.screens.PendingScreen
 import com.ledger.app.ui.screens.RecordScreen
 import com.ledger.app.ui.screens.SettingsScreen
@@ -43,24 +45,28 @@ fun AppRoot() {
         BottomItem("settings", "设置", Icons.Default.Settings)
     )
 
+    val entry by nav.currentBackStackEntryAsState()
+    val current = entry?.destination?.route
+    val isMainTab = items.any { it.route == current }
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val entry by nav.currentBackStackEntryAsState()
-                val current = entry?.destination?.route
-                items.forEach { item ->
-                    NavigationBarItem(
-                        selected = current == item.route,
-                        onClick = {
-                            nav.navigate(item.route) {
-                                popUpTo(nav.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label) }
-                    )
+            if (isMainTab) {
+                NavigationBar {
+                    items.forEach { item ->
+                        NavigationBarItem(
+                            selected = current == item.route,
+                            onClick = {
+                                nav.navigate(item.route) {
+                                    popUpTo(nav.graph.startDestinationId) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            label = { Text(item.label) }
+                        )
+                    }
                 }
             }
         }
@@ -74,7 +80,9 @@ fun AppRoot() {
             composable("bills") { BillsScreen(vm) }
             composable("pending") { PendingScreen() }
             composable("stats") { StatsScreen(vm) }
-            composable("settings") { SettingsScreen() }
+            composable("settings") { SettingsScreen(nav, vm) }
+            composable("category_manage") { CategoryManageScreen(nav, vm) }
+            composable("account_manage") { AccountManageScreen(nav, vm) }
         }
     }
 }
