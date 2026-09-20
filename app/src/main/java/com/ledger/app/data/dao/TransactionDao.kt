@@ -24,6 +24,13 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     fun observeAll(): Flow<List<Transaction>>
 
+    /** 按月查询：start = "2026-09-01"，end = "2026-10-01" */
+    @Query("SELECT * FROM transactions WHERE date >= :start AND date < :end ORDER BY date DESC, id DESC")
+    fun observeByRange(start: String, end: String): Flow<List<Transaction>>
+
+    @Query("SELECT * FROM transactions WHERE date >= :start AND date < :end ORDER BY date DESC, id DESC")
+    suspend fun getByRangeOnce(start: String, end: String): List<Transaction>
+
     @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     suspend fun observeAllOnce(): List<Transaction>
 

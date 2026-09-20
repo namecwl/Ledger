@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.Flow
 class LedgerRepository(private val db: AppDatabase) {
 
     fun observeTransactions(): Flow<List<Transaction>> = db.transactionDao().observeAll()
+
+    fun observeTransactionsByRange(start: String, end: String): Flow<List<Transaction>> =
+        db.transactionDao().observeByRange(start, end)
+
     fun observeCategories(): Flow<List<Category>> = db.categoryDao().observeAll()
     fun observeAccounts(): Flow<List<Account>> = db.accountDao().observeAll()
 

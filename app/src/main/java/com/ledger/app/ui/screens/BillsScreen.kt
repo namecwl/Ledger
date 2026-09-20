@@ -1,10 +1,12 @@
 package com.ledger.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,11 +23,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,197 +46,257 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledger.app.data.entity.Category
 import com.ledger.app.data.entity.Transaction
+import com.ledger.app.ui.components.BudgetCard
+import com.ledger.app.ui.theme.AmountColors
+import com.ledger.app.util.Format
 import com.ledger.app.vm.MainViewModel
 import java.time.LocalDate
 import java.time.YearMonth
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BillsScreen(vm: MainViewModel) {
 
-    val transactions by vm.transactions.collectAsStateWithLifecycle(initialValue = emptyList())
     val categories by vm.categories.collectAsStateWithLifecycle(initialValue = emptyList())
+    val transactions by vm.monthTransactions.collectAsStateWithLifecycle(initialValue = emptyList())
+    val currentMonth by vm.selectedMonth.collectAsStateWithLifecycle()
+    val budgetState by vm.budgetState.collectAsStateWithLifecycle()
 
     val catMap = remember(categories) { categories.associateBy { it.id } }
 
-    var currentMonth by remember { mutableStateOf(YearMonth.now()) }
-    val monthStr = currentMonth.toString()
-
-    val monthTx = remember(transactions, monthStr) {
-        transactions.filter { it.date.startsWith(monthStr) }
-    }
-
-    val expense = monthTx.filter { it.type == "expense" }.sumOf { it.amount }
-    val income = monthTx.filter { it.type == "income" }.sumOf { it.amount }
-    val balance = income - expense
-
-    val grouped = remember(monthTx) {
-        monthTx.groupBy { it.date.substring(0, 10) }
+    // 只对当月数据做一次分组
+    val grouped = remember(transactions) {
+        transactions.groupBy { it.date.take(10) }
             .toList()
             .sortedByDescending { it.first }
     }
 
-    var pendingDelete by remember { mutableStateOf<Transaction?>(null) }
+    val expense = remember(transactions) {
+        transactions.asSequence().filter { it.type == "expense" }.sumOf { it.amount }
+    }
+    val income = remember(transactions) {
+        transactions.asSequence().filter { it.type == "income" }.sumOf { it.amount }
+    }
+    val balance = income - expense
 
-    Column(
+    var editing by remember { mutableStateOf<Transaction?>(null) }
+    var deleting by remember { mutableStateOf<Transaction?>(null) }
+
+    LazyColumn(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
     ) {
-        // === 顶部汇总卡片 ===
-        Card(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    IconButton(onClick = { currentMonth = currentMonth.minusMonths(1) }) {
-                        Icon(Icons.Default.ChevronLeft, "上月")
-                    }
-                    Text(
-                        "${currentMonth.year}年${currentMonth.monthValue}月",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    IconButton(
-                        onClick = { currentMonth = currentMonth.plusMonths(1) },
-                        enabled = currentMonth < YearMonth.now()
-                    ) {
-                        Icon(Icons.Default.ChevronRight, "下月")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    SummaryItem(
-                        "支出",
-                        "¥%.2f".format(expense),
-                        Color(0xFFE53935),
-                        Modifier.weight(1f)
-                    )
-                    SummaryItem(
-                        "收入",
-                        "¥%.2f".format(income),
-                        Color(0xFF43A047),
-                        Modifier.weight(1f)
-                    )
-                    SummaryItem(
-                        "结余",
-                        "¥%.2f".format(balance),
-                        MaterialTheme.colorScheme.onPrimaryContainer,
-                        Modifier.weight(1f)
-                    )
+        // 月份切换
+        item(key = "month_header") {
+            MonthHeader(
+                month = currentMonth,
+                onPrev = { vm.selectMonth(currentMonth.minusMonths(1)) },
+                onNext = { vm.selectMonth(currentMonth.plusMonths(1)) },
+                onToday = { vm.selectMonth(YearMonth.now()) }
+            )
+        }
+
+        // 汇总
+        item(key = "summary") {
+            SummaryRow(expense, income, balance)
+        }
+
+        // 预算卡
+        if (budgetState != null && currentMonth == YearMonth.now()) {
+            item(key = "budget") {
+                Box(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    BudgetCard(budgetState!!)
                 }
             }
         }
 
-        // === 列表 ===
-        LazyColumn(Modifier.fillMaxSize()) {
-            if (grouped.isEmpty()) {
-                item {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(60.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "本月还没有账单",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+        // 账单列表
+        if (grouped.isEmpty()) {
+            item(key = "empty") {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(60.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("本月还没有账单", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            } else {
-                grouped.forEach { (day, list) ->
-                    item(key = "header_$day") {
-                        DayHeader(day, list)
-                    }
-                    items(list, key = { it.id }) { tx ->
-                        BillItem(
-                            tx = tx,
-                            catMap = catMap,
-                            onClick = { pendingDelete = tx }
-                        )
-                    }
+            }
+        } else {
+            grouped.forEach { (day, list) ->
+                item(key = "h_$day") {
+                    DayHeader(day, list)
+                }
+                items(list, key = { it.id }) { tx ->
+                    BillItem(
+                        tx = tx,
+                        catMap = catMap,
+                        onClick = { editing = tx },
+                        onLongClick = { deleting = tx }
+                    )
                 }
             }
         }
     }
 
-    pendingDelete?.let { tx ->
+    editing?.let { tx ->
+        BillEditDialog(
+            tx = tx,
+            categories = categories,
+            onDismiss = { editing = null },
+            onConfirm = { updated ->
+                vm.saveTransaction(updated)
+                editing = null
+            }
+        )
+    }
+
+    deleting?.let { tx ->
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
+            onDismissRequest = { deleting = null },
             title = { Text("删除这条账单？") },
-            text = { Text("¥%.2f".format(tx.amount)) },
+            text = { Text("¥${Format.money(tx.amount)}") },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteTransaction(tx)
-                    pendingDelete = null
+                    deleting = null
                 }) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { deleting = null }) { Text("取消") }
             }
         )
+    }
+}
+
+@Composable
+private fun MonthHeader(
+    month: YearMonth,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToday: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        IconButton(onClick = onPrev) {
+            Icon(Icons.Default.ChevronLeft, "上月")
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${month.year}年${month.monthValue}月",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            if (month != YearMonth.now()) {
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onToday) { Text("回到本月", fontSize = 12.sp) }
+            }
+        }
+        IconButton(
+            onClick = onNext,
+            enabled = month < YearMonth.now()
+        ) {
+            Icon(Icons.Default.ChevronRight, "下月")
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(expense: Double, income: Double, balance: Double) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(vertical = 18.dp),
+    ) {
+        SummaryItem("支出", expense, AmountColors.Expense, Modifier.weight(1f))
+        Box(
+            Modifier
+                .width(1.dp)
+                .height(36.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant)
+        )
+        SummaryItem("收入", income, AmountColors.Income, Modifier.weight(1f))
+        Box(
+            Modifier
+                .width(1.dp)
+                .height(36.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant)
+        )
+        SummaryItem("结余", balance, MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun SummaryItem(
     label: String,
-    value: String,
+    value: Double,
     color: Color,
     modifier: Modifier = Modifier
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
+            fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(4.dp))
-        Text(value, color = color, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            Format.money(value),
+            color = color,
+            fontWeight = FontWeight.Bold,
+            fontSize = 17.sp
+        )
     }
 }
 
 @Composable
 private fun DayHeader(day: String, list: List<Transaction>) {
-    val expense = list.filter { it.type == "expense" }.sumOf { it.amount }
-    val income = list.filter { it.type == "income" }.sumOf { it.amount }
-    val date = LocalDate.parse(day)
+    val expense = remember(list) {
+        list.asSequence().filter { it.type == "expense" }.sumOf { it.amount }
+    }
+    val income = remember(list) {
+        list.asSequence().filter { it.type == "income" }.sumOf { it.amount }
+    }
+
+    val date = remember(day) { LocalDate.parse(day) }
     val weekMap = listOf("一", "二", "三", "四", "五", "六", "日")
     val week = "周" + weekMap[date.dayOfWeek.value - 1]
 
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 18.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                day.substring(5),
+                Format.shortDay(day),
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp
             )
             Spacer(Modifier.width(6.dp))
-            Text(week, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        val parts = buildList {
-            if (expense > 0) add("支 ¥%.2f".format(expense))
-            if (income > 0) add("收 ¥%.2f".format(income))
+            Text(week, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(
-            parts.joinToString("   "),
-            fontSize = 12.sp,
+            buildString {
+                if (expense > 0) append("支 ${Format.money(expense)}")
+                if (income > 0) {
+                    if (isNotEmpty()) append("   ")
+                    append("收 ${Format.money(income)}")
+                }
+            },
+            fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
@@ -243,7 +306,8 @@ private fun DayHeader(day: String, list: List<Transaction>) {
 private fun BillItem(
     tx: Transaction,
     catMap: Map<Long, Category>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val cat = tx.categoryId?.let { catMap[it] }
     val parent = cat?.parentId?.let { catMap[it] }
@@ -254,45 +318,148 @@ private fun BillItem(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
-        Box(
+        Row(
             Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(icon, fontSize = 20.sp)
-        }
-        Spacer(Modifier.width(12.dp))
-
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = if (parentLabel != null) "$parentLabel · $label" else label,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
-            )
-            if (!tx.remark.isNullOrBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    tx.remark,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(icon, fontSize = 18.sp)
             }
-        }
+            Spacer(Modifier.width(12.dp))
 
-        Text(
-            text = (if (tx.type == "income") "+" else "-") + "%.2f".format(tx.amount),
-            color = if (tx.type == "income") Color(0xFF43A047)
-            else MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp
-        )
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (parentLabel != null) "$parentLabel · $label" else label,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = Format.timeOf(tx.date),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (!tx.remark.isNullOrBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        tx.remark,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Text(
+                text = (if (tx.type == "income") "+" else "-") + Format.money(tx.amount),
+                color = if (tx.type == "income") AmountColors.Income
+                else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp
+            )
+        }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun BillEditDialog(
+    tx: Transaction,
+    categories: List<Category>,
+    onDismiss: () -> Unit,
+    onConfirm: (Transaction) -> Unit
+) {
+    var amountText by remember { mutableStateOf(tx.amount.toString()) }
+    var remark by remember { mutableStateOf(tx.remark ?: "") }
+    var selectedCategory by remember { mutableStateOf(tx.categoryId) }
+
+    val tops = categories.filter { it.parentId == null && it.type == tx.type }
+    val subs = categories.filter { it.parentId == selectedCategory }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑账单") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("金额") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = remark,
+                    onValueChange = { remark = it },
+                    label = { Text("备注") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                Text("分类", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    tops.forEach { c ->
+                        FilterChip(
+                            selected = selectedCategory == c.id,
+                            onClick = { selectedCategory = c.id },
+                            label = { Text(c.name) }
+                        )
+                    }
+                }
+                if (subs.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        subs.forEach { c ->
+                            FilterChip(
+                                selected = selectedCategory == c.id,
+                                onClick = { selectedCategory = c.id },
+                                label = { Text(c.name) }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val amt = amountText.toDoubleOrNull() ?: return@TextButton
+                onConfirm(
+                    tx.copy(
+                        amount = amt,
+                        remark = remark.ifBlank { null },
+                        categoryId = selectedCategory,
+                        updatedAt = java.time.LocalDateTime.now().toString()
+                    )
+                )
+            }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }

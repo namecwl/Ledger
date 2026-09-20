@@ -6,15 +6,19 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.ledger.app.data.dao.AccountDao
 import com.ledger.app.data.dao.AutoRuleDao
+import com.ledger.app.data.dao.BudgetDao
 import com.ledger.app.data.dao.CategoryDao
 import com.ledger.app.data.dao.MerchantCategoryMapDao
 import com.ledger.app.data.dao.PendingTransactionDao
+import com.ledger.app.data.dao.SettingDao
 import com.ledger.app.data.dao.TransactionDao
 import com.ledger.app.data.entity.Account
 import com.ledger.app.data.entity.AutoRule
+import com.ledger.app.data.entity.Budget
 import com.ledger.app.data.entity.Category
 import com.ledger.app.data.entity.MerchantCategoryMap
 import com.ledger.app.data.entity.PendingTransaction
+import com.ledger.app.data.entity.Setting
 import com.ledger.app.data.entity.Transaction
 
 @Database(
@@ -24,9 +28,11 @@ import com.ledger.app.data.entity.Transaction
         Transaction::class,
         PendingTransaction::class,
         AutoRule::class,
-        MerchantCategoryMap::class
+        MerchantCategoryMap::class,
+        Budget::class,
+        Setting::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -37,6 +43,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pendingDao(): PendingTransactionDao
     abstract fun autoRuleDao(): AutoRuleDao
     abstract fun merchantMapDao(): MerchantCategoryMapDao
+    abstract fun budgetDao(): BudgetDao
+    abstract fun settingDao(): SettingDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
