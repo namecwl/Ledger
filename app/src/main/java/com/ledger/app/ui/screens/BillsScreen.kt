@@ -302,6 +302,7 @@ private fun DayHeader(day: String, list: List<Transaction>) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun BillItem(
     tx: Transaction,

@@ -31,4 +31,15 @@ object Format {
             dateStr
         }
     }
+
+    fun shortDay(dateStr: String): String {
+        return try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("MM-dd", Locale.getDefault())
+            val date = inputFormat.parse(dateStr) ?: Date()
+            outputFormat.format(date)
+        } catch (e: Exception) {
+            dateStr
+        }
+    }
 }

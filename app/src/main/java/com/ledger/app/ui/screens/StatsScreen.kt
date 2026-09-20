@@ -26,7 +26,7 @@ import java.time.LocalDate
 @Composable
 fun StatsScreen(vm: MainViewModel) {
 
-    val transactions by vm.transactions.collectAsStateWithLifecycle(initialValue = emptyList())
+    val transactions by vm.monthTransactions.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val catMap = remember(categories) { categories.associateBy { it.id } }

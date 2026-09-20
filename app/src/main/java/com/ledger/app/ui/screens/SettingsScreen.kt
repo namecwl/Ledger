@@ -159,7 +159,7 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
             text = {
                 Column {
                     Text("设置后，账单页会显示今日可花、累计结余等。",
-                        fontSize = 12.dp.value.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = temp,
@@ -170,7 +170,7 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text("留空或填 0 表示关闭预算",
-                        fontSize = 11.dp.value.sp,
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
