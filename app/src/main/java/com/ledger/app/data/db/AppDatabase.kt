@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ledger.app.data.dao.AccountDao
 import com.ledger.app.data.dao.AutoRuleDao
 import com.ledger.app.data.dao.BudgetDao
@@ -33,7 +35,7 @@ import com.ledger.app.data.entity.Transaction
         Setting::class
     ],
     version = 2,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -49,6 +51,25 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
 
+        private val Migration1To2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `budgets` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`month` TEXT NOT NULL, " +
+                        "`amount` REAL NOT NULL, " +
+                        "`createdAt` TEXT NOT NULL, " +
+                        "`updatedAt` TEXT NOT NULL)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `settings` (" +
+                        "`key` TEXT NOT NULL, " +
+                        "`value` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`key`))"
+                )
+            }
+        }
+
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -56,7 +77,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "ledger.db"
                 )
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(Migration1To2)
                     .build()
                     .also { INSTANCE = it }
             }

@@ -1,5 +1,7 @@
 package com.ledger.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,11 +20,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -29,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,103 +54,118 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledger.app.data.entity.Category
 import com.ledger.app.data.entity.Transaction
 import com.ledger.app.ui.components.BudgetCard
+import com.ledger.app.ui.components.EmptyState
+import com.ledger.app.ui.components.LedgerCard
+import com.ledger.app.ui.components.ScreenHeader
 import com.ledger.app.ui.theme.AmountColors
 import com.ledger.app.util.Format
 import com.ledger.app.vm.MainViewModel
 import java.time.LocalDate
 import java.time.YearMonth
 
-@OptIn(ExperimentalLayoutApi::class)
+private val InflowTypes = setOf("income", "refund", "reimbursement")
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun BillsScreen(vm: MainViewModel) {
-
-    val categories by vm.categories.collectAsStateWithLifecycle(initialValue = emptyList())
-    val transactions by vm.monthTransactions.collectAsStateWithLifecycle(initialValue = emptyList())
+    val categories by vm.categories.collectAsStateWithLifecycle()
+    val transactions by vm.monthTransactions.collectAsStateWithLifecycle()
     val currentMonth by vm.selectedMonth.collectAsStateWithLifecycle()
     val budgetState by vm.budgetState.collectAsStateWithLifecycle()
 
-    val catMap = remember(categories) { categories.associateBy { it.id } }
-
-    // 只对当月数据做一次分组
+    val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val grouped = remember(transactions) {
-        transactions.groupBy { it.date.take(10) }
+        transactions
+            .groupBy { it.date.take(10) }
             .toList()
             .sortedByDescending { it.first }
     }
-
-    val expense = remember(transactions) {
-        transactions.asSequence().filter { it.type == "expense" }.sumOf { it.amount }
+    val totals = remember(transactions) {
+        var expense = 0.0
+        var income = 0.0
+        for (transaction in transactions) {
+            if (transaction.type == "expense") expense += transaction.amount
+            if (transaction.type in InflowTypes) income += transaction.amount
+        }
+        expense to income
     }
-    val income = remember(transactions) {
-        transactions.asSequence().filter { it.type == "income" }.sumOf { it.amount }
-    }
-    val balance = income - expense
 
     var editing by remember { mutableStateOf<Transaction?>(null) }
     var deleting by remember { mutableStateOf<Transaction?>(null) }
 
     LazyColumn(
-        Modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 28.dp)
     ) {
-        // 月份切换
-        item(key = "month_header") {
-            MonthHeader(
-                month = currentMonth,
-                onPrev = { vm.selectMonth(currentMonth.minusMonths(1)) },
-                onNext = { vm.selectMonth(currentMonth.plusMonths(1)) },
-                onToday = { vm.selectMonth(YearMonth.now()) }
+        item(key = "header", contentType = "screen_header") {
+            ScreenHeader(
+                title = "账单",
+                subtitle = "每一笔收支，都清晰可见",
+                trailing = {
+                    if (currentMonth != YearMonth.now()) {
+                        IconButton(onClick = { vm.selectMonth(YearMonth.now()) }) {
+                            Icon(Icons.Default.Today, contentDescription = "回到本月", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
             )
         }
 
-        // 汇总
-        item(key = "summary") {
-            SummaryRow(expense, income, balance)
+        item(key = "month_nav", contentType = "month_nav") {
+            MonthNavigator(
+                month = currentMonth,
+                onPrev = { vm.selectMonth(currentMonth.minusMonths(1)) },
+                onNext = { vm.selectMonth(currentMonth.plusMonths(1)) },
+                canGoNext = currentMonth < YearMonth.now()
+            )
         }
 
-        // 预算卡
+        item(key = "summary", contentType = "summary") {
+            SummaryHero(
+                month = currentMonth,
+                expense = totals.first,
+                income = totals.second
+            )
+        }
+
         if (budgetState != null && currentMonth == YearMonth.now()) {
-            item(key = "budget") {
-                Box(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+            item(key = "budget", contentType = "budget") {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     BudgetCard(budgetState!!)
                 }
             }
         }
 
-        // 账单列表
         if (grouped.isEmpty()) {
-            item(key = "empty") {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(60.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("本月还没有账单", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            item(key = "empty", contentType = "empty") {
+                EmptyState(
+                    emoji = "🧾",
+                    title = "本月还没有账单",
+                    subtitle = "记下第一笔，月度概览就会在这里出现"
+                )
             }
         } else {
-            grouped.forEach { (day, list) ->
-                item(key = "h_$day") {
-                    DayHeader(day, list)
+            grouped.forEach { (day, dayTransactions) ->
+                stickyHeader(key = "header_$day", contentType = "day_header") {
+                    DayHeader(day, dayTransactions)
                 }
-                items(list, key = { it.id }) { tx ->
+                items(dayTransactions, key = { it.id }, contentType = { "bill" }) { transaction ->
                     BillItem(
-                        tx = tx,
-                        catMap = catMap,
-                        onClick = { editing = tx },
-                        onLongClick = { deleting = tx }
+                        transaction = transaction,
+                        categoryMap = categoryMap,
+                        onClick = { editing = transaction },
+                        onLongClick = { deleting = transaction }
                     )
                 }
             }
         }
     }
 
-    editing?.let { tx ->
+    editing?.let { transaction ->
         BillEditDialog(
-            tx = tx,
+            transaction = transaction,
             categories = categories,
             onDismiss = { editing = null },
             onConfirm = { updated ->
@@ -153,16 +175,18 @@ fun BillsScreen(vm: MainViewModel) {
         )
     }
 
-    deleting?.let { tx ->
+    deleting?.let { transaction ->
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("删除这条账单？") },
-            text = { Text("¥${Format.money(tx.amount)}") },
+            text = {
+                Text("${transaction.remark ?: "无备注"} · ¥${Format.money(transaction.amount)}")
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.deleteTransaction(tx)
+                    vm.deleteTransaction(transaction)
                     deleting = null
-                }) { Text("删除") }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { deleting = null }) { Text("取消") }
@@ -172,206 +196,202 @@ fun BillsScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun MonthHeader(
+private fun MonthNavigator(
     month: YearMonth,
     onPrev: () -> Unit,
     onNext: () -> Unit,
-    onToday: () -> Unit
+    canGoNext: Boolean
 ) {
     Row(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onPrev) {
-            Icon(Icons.Default.ChevronLeft, "上月")
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "${month.year}年${month.monthValue}月",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            if (month != YearMonth.now()) {
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = onToday) { Text("回到本月", fontSize = 12.sp) }
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrev) {
+                    Icon(Icons.Default.ChevronLeft, contentDescription = "上月")
+                }
+                Text(
+                    text = "${month.year}年${month.monthValue}月",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+                IconButton(onClick = onNext, enabled = canGoNext) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = "下月")
+                }
             }
         }
-        IconButton(
-            onClick = onNext,
-            enabled = month < YearMonth.now()
-        ) {
-            Icon(Icons.Default.ChevronRight, "下月")
+    }
+}
+
+@Composable
+private fun SummaryHero(month: YearMonth, expense: Double, income: Double) {
+    val balance = income - expense
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        Color(0xFF0C7D51)
+                    )
+                )
+            )
+            .padding(horizontal = 20.dp, vertical = 20.dp)
+    ) {
+        Column {
+            Text(
+                "${month.monthValue}月结余",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.76f)
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "¥${Format.money(balance)}",
+                style = MaterialTheme.typography.displaySmall,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(18.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SummaryMetric("支出", expense, Modifier.weight(1f))
+                SummaryMetric("收入", income, Modifier.weight(1f))
+            }
         }
     }
 }
 
 @Composable
-private fun SummaryRow(expense: Double, income: Double, balance: Double) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(vertical = 18.dp),
+private fun SummaryMetric(label: String, amount: Double, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        SummaryItem("支出", expense, AmountColors.Expense, Modifier.weight(1f))
-        Box(
-            Modifier
-                .width(1.dp)
-                .height(36.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant)
-        )
-        SummaryItem("收入", income, AmountColors.Income, Modifier.weight(1f))
-        Box(
-            Modifier
-                .width(1.dp)
-                .height(36.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant)
-        )
-        SummaryItem("结余", balance, MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun SummaryItem(
-    label: String,
-    value: Double,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+        Spacer(Modifier.height(3.dp))
         Text(
-            label,
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            Format.money(value),
-            color = color,
-            fontWeight = FontWeight.Bold,
-            fontSize = 17.sp
+            "¥${Format.money(amount)}",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White
         )
     }
 }
 
 @Composable
-private fun DayHeader(day: String, list: List<Transaction>) {
-    val expense = remember(list) {
-        list.asSequence().filter { it.type == "expense" }.sumOf { it.amount }
+private fun DayHeader(day: String, transactions: List<Transaction>) {
+    val totals = remember(transactions) {
+        var expense = 0.0
+        var income = 0.0
+        for (transaction in transactions) {
+            if (transaction.type == "expense") expense += transaction.amount
+            if (transaction.type in InflowTypes) income += transaction.amount
+        }
+        expense to income
     }
-    val income = remember(list) {
-        list.asSequence().filter { it.type == "income" }.sumOf { it.amount }
-    }
-
-    val date = remember(day) { LocalDate.parse(day) }
-    val weekMap = listOf("一", "二", "三", "四", "五", "六", "日")
-    val week = "周" + weekMap[date.dayOfWeek.value - 1]
+    val date = remember(day) { runCatching { LocalDate.parse(day) }.getOrNull() }
+    val weekText = date?.let {
+        "周" + listOf("一", "二", "三", "四", "五", "六", "日")[it.dayOfWeek.value - 1]
+    }.orEmpty()
 
     Row(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 10.dp),
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))
+            .padding(horizontal = 20.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                Format.shortDay(day),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp
-            )
+            Text(Format.shortDay(day), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.width(6.dp))
-            Text(week, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(weekText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(
-            buildString {
-                if (expense > 0) append("支 ${Format.money(expense)}")
-                if (income > 0) {
-                    if (isNotEmpty()) append("   ")
-                    append("收 ${Format.money(income)}")
-                }
-            },
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        val summary = buildString {
+            if (totals.first > 0) append("支 ¥${Format.money(totals.first)}")
+            if (totals.second > 0) {
+                if (isNotEmpty()) append("  ")
+                append("收 ¥${Format.money(totals.second)}")
+            }
+        }
+        Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BillItem(
-    tx: Transaction,
-    catMap: Map<Long, Category>,
+    transaction: Transaction,
+    categoryMap: Map<Long, Category>,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val cat = tx.categoryId?.let { catMap[it] }
-    val parent = cat?.parentId?.let { catMap[it] }
-    val icon = parent?.icon ?: cat?.icon ?: "📝"
-    val label = cat?.name ?: "未分类"
+    val category = transaction.categoryId?.let { categoryMap[it] }
+    val parent = category?.parentId?.let { categoryMap[it] }
+    val icon = parent?.icon ?: category?.icon ?: "📝"
+    val label = category?.name ?: "未分类"
     val parentLabel = parent?.name
+    val isIncome = transaction.type in InflowTypes
 
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+    LedgerCard(
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier
-                    .size(40.dp)
+                modifier = Modifier
+                    .size(42.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(
+                        if (isIncome) AmountColors.Income.copy(alpha = 0.11f)
+                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon, fontSize = 18.sp)
+                Text(icon, fontSize = 19.sp)
             }
             Spacer(Modifier.width(12.dp))
-
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (parentLabel != null) "$parentLabel · $label" else label,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = Format.timeOf(tx.date),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (!tx.remark.isNullOrBlank()) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        tx.remark,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (parentLabel != null) "$parentLabel · $label" else label,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = buildString {
+                        append(Format.timeOf(transaction.date))
+                        if (!transaction.remark.isNullOrBlank()) append(" · ${transaction.remark}")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
             }
-
+            Spacer(Modifier.width(10.dp))
             Text(
-                text = (if (tx.type == "income") "+" else "-") + Format.money(tx.amount),
-                color = if (tx.type == "income") AmountColors.Income
-                else MaterialTheme.colorScheme.onSurface,
+                text = (if (isIncome) "+" else "-") + "¥" + Format.money(transaction.amount),
+                color = when (transaction.type) {
+                    "refund", "reimbursement" -> AmountColors.Refund
+                    "income" -> AmountColors.Income
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp
             )
@@ -382,17 +402,20 @@ private fun BillItem(
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun BillEditDialog(
-    tx: Transaction,
+    transaction: Transaction,
     categories: List<Category>,
     onDismiss: () -> Unit,
     onConfirm: (Transaction) -> Unit
 ) {
-    var amountText by remember { mutableStateOf(tx.amount.toString()) }
-    var remark by remember { mutableStateOf(tx.remark ?: "") }
-    var selectedCategory by remember { mutableStateOf(tx.categoryId) }
-
-    val tops = categories.filter { it.parentId == null && it.type == tx.type }
-    val subs = categories.filter { it.parentId == selectedCategory }
+    var amountText by remember { mutableStateOf(transaction.amount.toString()) }
+    var remark by remember { mutableStateOf(transaction.remark ?: "") }
+    var selectedCategory by remember { mutableStateOf(transaction.categoryId) }
+    val tops = remember(categories, transaction.type) {
+        categories.filter { it.parentId == null && it.type == transaction.type }
+    }
+    val subs = remember(categories, selectedCategory) {
+        categories.filter { it.parentId == selectedCategory }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -415,17 +438,17 @@ private fun BillEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                Text("分类", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("分类", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(6.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    tops.forEach { c ->
+                    tops.forEach { category ->
                         FilterChip(
-                            selected = selectedCategory == c.id,
-                            onClick = { selectedCategory = c.id },
-                            label = { Text(c.name) }
+                            selected = selectedCategory == category.id,
+                            onClick = { selectedCategory = category.id },
+                            label = { Text(category.name) }
                         )
                     }
                 }
@@ -435,11 +458,11 @@ private fun BillEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        subs.forEach { c ->
+                        subs.forEach { category ->
                             FilterChip(
-                                selected = selectedCategory == c.id,
-                                onClick = { selectedCategory = c.id },
-                                label = { Text(c.name) }
+                                selected = selectedCategory == category.id,
+                                onClick = { selectedCategory = category.id },
+                                label = { Text(category.name) }
                             )
                         }
                     }
@@ -448,13 +471,13 @@ private fun BillEditDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val amt = amountText.toDoubleOrNull() ?: return@TextButton
+                val amount = amountText.toDoubleOrNull() ?: return@TextButton
                 onConfirm(
-                    tx.copy(
-                        amount = amt,
+                    transaction.copy(
+                        amount = amount,
                         remark = remark.ifBlank { null },
                         categoryId = selectedCategory,
-                        updatedAt = java.time.LocalDateTime.now().toString()
+                        updatedAt = Format.nowIso()
                     )
                 )
             }) { Text("保存") }

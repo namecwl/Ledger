@@ -1,5 +1,6 @@
 package com.ledger.app.data.seed
 
+import androidx.room.withTransaction
 import com.ledger.app.data.db.AppDatabase
 import com.ledger.app.data.entity.Account
 import com.ledger.app.data.entity.Category
@@ -37,39 +38,41 @@ object CategorySeeder {
     suspend fun seedIfEmpty(db: AppDatabase) {
         if (db.categoryDao().count() > 0) return
 
-        val dao = db.categoryDao()
-        var order = 0
-        (expense + income).forEach { s ->
-            val pid = dao.insert(
-                Category(
-                    name = s.parent,
-                    parentId = null,
-                    type = s.type,
-                    icon = s.icon,
-                    sortOrder = order++,
-                    isBuiltin = true
-                )
-            )
-            var childOrder = 0
-            s.children.forEach { child ->
-                dao.insert(
+        db.withTransaction {
+            val dao = db.categoryDao()
+            var order = 0
+            (expense + income).forEach { seed ->
+                val parentId = dao.insert(
                     Category(
-                        name = child,
-                        parentId = pid,
-                        type = s.type,
-                        sortOrder = childOrder++,
+                        name = seed.parent,
+                        parentId = null,
+                        type = seed.type,
+                        icon = seed.icon,
+                        sortOrder = order++,
                         isBuiltin = true
                     )
                 )
+                var childOrder = 0
+                seed.children.forEach { child ->
+                    dao.insert(
+                        Category(
+                            name = child,
+                            parentId = parentId,
+                            type = seed.type,
+                            sortOrder = childOrder++,
+                            isBuiltin = true
+                        )
+                    )
+                }
             }
-        }
 
-        if (db.accountDao().count() == 0) {
-            val adao = db.accountDao()
-            adao.insert(Account(name = "现金", type = "cash", sortOrder = 0, isBuiltin = true))
-            adao.insert(Account(name = "支付宝", type = "alipay", sortOrder = 1, isBuiltin = true))
-            adao.insert(Account(name = "微信", type = "wechat", sortOrder = 2, isBuiltin = true))
-            adao.insert(Account(name = "银行卡", type = "bank", sortOrder = 3, isBuiltin = true))
+            if (db.accountDao().count() == 0) {
+                val accountDao = db.accountDao()
+                accountDao.insert(Account(name = "现金", type = "cash", sortOrder = 0, isBuiltin = true))
+                accountDao.insert(Account(name = "支付宝", type = "alipay", sortOrder = 1, isBuiltin = true))
+                accountDao.insert(Account(name = "微信", type = "wechat", sortOrder = 2, isBuiltin = true))
+                accountDao.insert(Account(name = "银行卡", type = "bank", sortOrder = 3, isBuiltin = true))
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,99 +30,87 @@ import com.ledger.app.util.Format
 
 @Composable
 fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
-    val progress by animateFloatAsState(state.monthProgress, label = "budget")
-
+    val progress by animateFloatAsState(state.monthProgress, label = "budget_progress")
     val todayColor = when {
         state.todayRemaining < 0 -> AmountColors.Expense
-        state.todayRemaining < state.dailyBase * 0.3 -> Color(0xFFFB8C00)
+        state.todayRemaining < state.dailyBase * 0.3 -> AmountColors.Warning
         else -> MaterialTheme.colorScheme.primary
     }
+    val progressColor = if (state.monthProgress > 0.9f) AmountColors.Expense else MaterialTheme.colorScheme.primary
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(18.dp)
+    LedgerCard(
+        modifier = modifier,
+        contentPadding = PaddingValues(18.dp)
     ) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Column(Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "今日可花",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "¥${Format.money(state.todayAllowance.coerceAtLeast(0.0))}",
                     fontSize = 30.sp,
+                    lineHeight = 34.sp,
                     fontWeight = FontWeight.Bold,
                     color = todayColor
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = progressColor.copy(alpha = 0.11f)
+            ) {
                 Text(
-                    "剩余",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "¥${Format.money(state.monthRemaining)}",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
+                    "${Format.percent(state.monthProgress.toDouble())}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = progressColor,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                 )
             }
         }
 
         Spacer(Modifier.height(14.dp))
-
-        // 进度条
         Box(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(7.dp)
+                .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Box(
-                Modifier
-                    .fillMaxWidth(progress)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(
-                        if (state.monthProgress > 0.9f) AmountColors.Expense
-                        else MaterialTheme.colorScheme.primary
-                    )
+                modifier = Modifier
+                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .height(7.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(progressColor)
             )
         }
-
         Spacer(Modifier.height(10.dp))
-
         Row(
-            Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 "本月已花 ¥${Format.money(state.monthSpent)}",
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 "预算 ¥${Format.money(state.monthBudget)}",
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        // 今日细账
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
         Row(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             MiniStat("今日已花", "¥${Format.money(state.todaySpent)}")
@@ -137,12 +127,11 @@ fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
 @Composable
 private fun MiniStat(label: String, value: String, valueColor: Color? = null) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(3.dp))
         Text(
             value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
             color = valueColor ?: MaterialTheme.colorScheme.onSurface
         )
     }

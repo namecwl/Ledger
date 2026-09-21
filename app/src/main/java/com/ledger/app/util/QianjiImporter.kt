@@ -7,8 +7,6 @@ import com.ledger.app.data.entity.Transaction
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 @Serializable
 data class QianjiRecord(
@@ -105,6 +103,7 @@ object QianjiImporter {
         var skipped = 0
 
         val txDao = db.transactionDao()
+        val now = Format.nowIso()
 
         for (r in records) {
             if (txDao.findBySourceKey(r.key) != null) {
@@ -139,8 +138,8 @@ object QianjiImporter {
                     relatedKey = r.sourceid.ifBlank { null },
                     rawCategory = r.category,
                     rawType = r.type,
-                    createdAt = LocalDateTime.now().toString(),
-                    updatedAt = LocalDateTime.now().toString()
+                    createdAt = now,
+                    updatedAt = now
                 )
             )
 

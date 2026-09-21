@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,18 +25,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,25 +54,33 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledger.app.data.entity.Category
 import com.ledger.app.data.entity.Transaction
+import com.ledger.app.ui.components.LedgerCard
+import com.ledger.app.ui.components.ScreenHeader
 import com.ledger.app.ui.theme.AmountColors
 import com.ledger.app.util.Format
 import com.ledger.app.vm.MainViewModel
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+
+private val KeypadRows = listOf(
+    listOf("1", "2", "3"),
+    listOf("4", "5", "6"),
+    listOf("7", "8", "9"),
+    listOf(".", "0", "⌫")
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecordScreen(vm: MainViewModel) {
-
-    val ctx = LocalContext.current
-    val categories by vm.categories.collectAsStateWithLifecycle(initialValue = emptyList())
-    val accounts by vm.accounts.collectAsStateWithLifecycle(initialValue = emptyList())
+    val context = LocalContext.current
+    val categories by vm.categories.collectAsStateWithLifecycle()
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
     val todayBudget by vm.todayBudget.collectAsStateWithLifecycle()
 
     var type by remember { mutableStateOf("expense") }
@@ -79,7 +90,6 @@ fun RecordScreen(vm: MainViewModel) {
     var selectedAccount by remember { mutableStateOf<Long?>(null) }
     var remark by remember { mutableStateOf("") }
     var pickedDateTime by remember { mutableStateOf(LocalDateTime.now()) }
-
     var showRemarkDialog by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
 
@@ -100,85 +110,123 @@ fun RecordScreen(vm: MainViewModel) {
         }
     }
     LaunchedEffect(accounts) {
-        if (selectedAccount == null) selectedAccount = accounts.firstOrNull()?.id
+        if (selectedAccount == null || accounts.none { it.id == selectedAccount }) {
+            selectedAccount = accounts.firstOrNull()?.id
+        }
     }
 
     val isExpense = type == "expense"
     val amountColor by animateColorAsState(
-        if (isExpense) AmountColors.Expense else AmountColors.Income,
-        label = "amtColor"
+        targetValue = if (isExpense) AmountColors.Expense else AmountColors.Income,
+        label = "amount_color"
     )
+    val parsedAmount = amountText.toDoubleOrNull() ?: 0.0
+    val canSave = parsedAmount > 0.0
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize()) {
-
-            // 顶部类型切换 + 今日可花
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TypeSwitch(current = type, onSelect = {
-                    type = it
-                    selectedSub = null
-                })
-                if (todayBudget != null) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("今日可花", fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            "¥${Format.money(todayBudget!!.todayAllowance.coerceAtLeast(0.0))}",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ScreenHeader(
+                title = "记一笔",
+                subtitle = "简单一点，坚持更久",
+                trailing = {
+                    if (todayBudget != null) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                Text(
+                                    "今日可花",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                                )
+                                Text(
+                                    "¥${Format.money(todayBudget!!.todayAllowance.coerceAtLeast(0.0))}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                     }
+                }
+            )
+
+            LedgerCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 15.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TypeSwitch(current = type, onSelect = {
+                        type = it
+                        selectedSub = null
+                    })
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "人民币",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        "¥",
+                        fontSize = 22.sp,
+                        color = amountColor,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = if (amountText.isEmpty()) "0.00" else formatAmount(amountText),
+                        fontSize = 44.sp,
+                        lineHeight = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (amountText.isEmpty()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
+                        } else {
+                            amountColor
+                        }
+                    )
                 }
             }
 
-            // 大金额
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text("¥", fontSize = 22.sp, color = amountColor,
-                    modifier = Modifier.padding(bottom = 6.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = if (amountText.isEmpty()) "0.00" else formatAmount(amountText),
-                    fontSize = 46.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (amountText.isEmpty())
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                    else amountColor
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // 分类网格
             Column(
-                Modifier
+                modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 14.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
+                Text(
+                    "选择分类",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
                 FlowRow(
-                    Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    tops.forEach { cat ->
+                    tops.forEach { category ->
                         CategoryCell(
-                            category = cat,
-                            selected = selectedTop == cat.id,
+                            category = category,
+                            selected = selectedTop == category.id,
                             onClick = {
-                                selectedTop = cat.id
+                                selectedTop = category.id
                                 selectedSub = null
                             }
                         )
@@ -186,64 +234,42 @@ fun RecordScreen(vm: MainViewModel) {
                 }
 
                 if (subs.isNotEmpty()) {
-                    Spacer(Modifier.height(18.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(12.dp))
-                    Text("二级分类", fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp))
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "子分类",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(7.dp))
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
-                        subs.forEach { sub ->
+                        subs.forEach { subcategory ->
                             FilterChip(
-                                selected = selectedSub == sub.id,
-                                onClick = { selectedSub = sub.id },
-                                label = { Text(sub.name) }
+                                selected = selectedSub == subcategory.id,
+                                onClick = { selectedSub = subcategory.id },
+                                label = { Text(subcategory.name) }
                             )
                         }
                     }
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            ActionBar(
+                remark = remark,
+                dateTime = pickedDateTime,
+                accountName = accounts.firstOrNull { it.id == selectedAccount }?.name ?: "账户",
+                onRemark = { showRemarkDialog = true },
+                onDateTime = { pickDateTime(context, pickedDateTime) { pickedDateTime = it } },
+                onAccount = { showAccountDialog = true }
+            )
 
-            // 底部信息栏
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = { showRemarkDialog = true }) {
-                    Icon(Icons.Default.Edit, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(remark.ifBlank { "备注" }, maxLines = 1, fontSize = 13.sp)
-                }
-                TextButton(onClick = {
-                    pickDateTime(ctx, pickedDateTime) { pickedDateTime = it }
-                }) {
-                    Text(
-                        pickedDateTime.format(DateTimeFormatter.ofPattern("MM-dd HH:mm")),
-                        fontSize = 13.sp
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showAccountDialog = true }) {
-                    Text(
-                        accounts.firstOrNull { it.id == selectedAccount }?.name ?: "账户",
-                        fontSize = 13.sp
-                    )
-                }
-            }
-
-            // 键盘
             Keypad(
                 accentColor = amountColor,
-                onDigit = { d ->
+                onDigit = { digit ->
                     if (amountText.length < 10) {
-                        amountText = if (amountText == "0") d else amountText + d
+                        amountText = if (amountText == "0") digit else amountText + digit
                     }
                 },
                 onDot = {
@@ -255,15 +281,12 @@ fun RecordScreen(vm: MainViewModel) {
                     if (amountText.isNotEmpty()) amountText = amountText.dropLast(1)
                 },
                 onSave = {
-                    val amount = amountText.toDoubleOrNull() ?: return@Keypad
-                    if (amount <= 0) return@Keypad
-                    val iso = pickedDateTime.format(
-                        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-                    )
+                    if (!canSave) return@Keypad
+                    val iso = Format.iso(pickedDateTime)
                     vm.saveTransaction(
                         Transaction(
                             type = type,
-                            amount = amount,
+                            amount = parsedAmount,
                             categoryId = selectedSub ?: selectedTop,
                             accountId = selectedAccount,
                             date = iso,
@@ -275,9 +298,9 @@ fun RecordScreen(vm: MainViewModel) {
                     amountText = ""
                     remark = ""
                     pickedDateTime = LocalDateTime.now()
-                    scope.launch { snackbar.showSnackbar("已记账 ¥${Format.money(amount)}") }
+                    scope.launch { snackbar.showSnackbar("已记下 ¥${Format.money(parsedAmount)}") }
                 },
-                canSave = (amountText.toDoubleOrNull() ?: 0.0) > 0
+                canSave = canSave
             )
         }
 
@@ -285,7 +308,7 @@ fun RecordScreen(vm: MainViewModel) {
             hostState = snackbar,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 270.dp)
+                .padding(bottom = 220.dp)
         )
     }
 
@@ -293,13 +316,13 @@ fun RecordScreen(vm: MainViewModel) {
         var temp by remember { mutableStateOf(remark) }
         AlertDialog(
             onDismissRequest = { showRemarkDialog = false },
-            title = { Text("备注") },
+            title = { Text("添加备注") },
             text = {
                 OutlinedTextField(
                     value = temp,
                     onValueChange = { temp = it },
                     singleLine = true,
-                    placeholder = { Text("添加备注…") },
+                    placeholder = { Text("例如：和朋友午餐") },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -321,14 +344,36 @@ fun RecordScreen(vm: MainViewModel) {
             title = { Text("选择账户") },
             text = {
                 Column {
-                    accounts.forEach { acc ->
-                        ListItem(
-                            headlineContent = { Text(acc.name) },
-                            modifier = Modifier.clickable {
-                                selectedAccount = acc.id
-                                showAccountDialog = false
+                    accounts.forEach { account ->
+                        val selected = selectedAccount == account.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    selectedAccount = account.id
+                                    showAccountDialog = false
+                                }
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else Color.Transparent
+                                )
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Wallet, null, modifier = Modifier.size(17.dp))
                             }
-                        )
+                            Spacer(Modifier.width(10.dp))
+                            Text(account.name, modifier = Modifier.weight(1f))
+                            if (selected) Text("已选择", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             },
@@ -340,56 +385,57 @@ fun RecordScreen(vm: MainViewModel) {
 }
 
 private fun pickDateTime(
-    ctx: android.content.Context,
+    context: android.content.Context,
     initial: LocalDateTime,
     onPicked: (LocalDateTime) -> Unit
 ) {
     DatePickerDialog(
-        ctx,
-        { _, y, m, d ->
+        context,
+        { _, year, month, day ->
             TimePickerDialog(
-                ctx,
-                { _, h, min -> onPicked(LocalDateTime.of(y, m + 1, d, h, min)) },
-                initial.hour, initial.minute, true
+                context,
+                { _, hour, minute -> onPicked(LocalDateTime.of(year, month + 1, day, hour, minute)) },
+                initial.hour,
+                initial.minute,
+                true
             ).show()
         },
-        initial.year, initial.monthValue - 1, initial.dayOfMonth
+        initial.year,
+        initial.monthValue - 1,
+        initial.dayOfMonth
     ).show()
 }
 
 private fun formatAmount(raw: String): String {
     val dot = raw.indexOf('.')
-    if (dot < 0) return raw
-    val intPart = raw.substring(0, dot)
-    val decPart = raw.substring(dot)
-    if (intPart.isEmpty()) return raw
-    val grouped = intPart.reversed().chunked(3).joinToString(",").reversed()
-    return grouped + decPart
+    if (dot < 0) return raw.reversed().chunked(3).joinToString(",").reversed()
+    val integerPart = raw.substring(0, dot)
+    val decimalPart = raw.substring(dot)
+    if (integerPart.isEmpty()) return raw
+    val grouped = integerPart.reversed().chunked(3).joinToString(",").reversed()
+    return grouped + decimalPart
 }
 
 @Composable
 private fun TypeSwitch(current: String, onSelect: (String) -> Unit) {
     Row(
-        Modifier
-            .clip(RoundedCornerShape(24.dp))
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(4.dp)
+            .padding(3.dp)
     ) {
         listOf("expense" to "支出", "income" to "收入").forEach { (key, label) ->
             val selected = current == key
             Box(
-                Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.surface else Color.Transparent
-                    )
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(if (selected) MaterialTheme.colorScheme.surface else Color.Transparent)
                     .clickable { onSelect(key) }
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .padding(horizontal = 20.dp, vertical = 7.dp)
             ) {
                 Text(
                     label,
-                    fontSize = 14.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    style = MaterialTheme.typography.labelLarge,
                     color = if (selected) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -399,40 +445,74 @@ private fun TypeSwitch(current: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun CategoryCell(
-    category: Category,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
+private fun CategoryCell(category: Category, selected: Boolean, onClick: () -> Unit) {
     Column(
-        Modifier
+        modifier = Modifier
             .width(72.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(15.dp))
             .clickable(onClick = onClick)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.66f)
+                else Color.Transparent
+            )
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier
-                .size(50.dp)
+            modifier = Modifier
+                .size(46.dp)
                 .clip(CircleShape)
                 .background(
-                    if (selected) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceVariant
+                    if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surface
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Text(category.icon ?: "📝", fontSize = 22.sp)
+            Text(category.icon ?: "📝", fontSize = 20.sp)
         }
         Spacer(Modifier.height(6.dp))
         Text(
             category.name,
-            fontSize = 12.sp,
-            color = if (selected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
         )
+    }
+}
+
+@Composable
+private fun ActionBar(
+    remark: String,
+    dateTime: LocalDateTime,
+    accountName: String,
+    onRemark: () -> Unit,
+    onDateTime: () -> Unit,
+    onAccount: () -> Unit
+) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onRemark, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.Edit, null, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(remark.ifBlank { "备注" }, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
+        }
+        TextButton(onClick = onDateTime, modifier = Modifier.weight(1.15f)) {
+            Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(Format.monthDayTime(dateTime), maxLines = 1, fontSize = 12.sp)
+        }
+        TextButton(onClick = onAccount, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.Wallet, null, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(accountName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
+        }
     }
 }
 
@@ -445,71 +525,66 @@ private fun Keypad(
     onSave: () -> Unit,
     canSave: Boolean
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(6.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 8.dp
     ) {
-        Column(Modifier.weight(1f)) {
-            val rows = listOf(
-                listOf("1", "2", "3"),
-                listOf("4", "5", "6"),
-                listOf("7", "8", "9"),
-                listOf(".", "0", "⌫")
-            )
-            rows.forEach { row ->
-                Row(Modifier.fillMaxWidth()) {
-                    row.forEach { key ->
-                        KeyButton(
-                            key = key,
-                            onClick = {
-                                when (key) {
-                                    "⌫" -> onBackspace()
-                                    "." -> onDot()
-                                    else -> onDigit(key)
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                KeypadRows.forEach { row ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        row.forEach { key ->
+                            KeyButton(
+                                key = key,
+                                onClick = {
+                                    when (key) {
+                                        "⌫" -> onBackspace()
+                                        "." -> onDot()
+                                        else -> onDigit(key)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
-        }
-        Button(
-            onClick = onSave,
-            enabled = canSave,
-            modifier = Modifier
-                .width(92.dp)
-                .height(202.dp)
-                .padding(4.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = accentColor)
-        ) {
-            Text("保存", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Button(
+                onClick = onSave,
+                enabled = canSave,
+                modifier = Modifier
+                    .width(88.dp)
+                    .height(192.dp)
+                    .padding(4.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+            ) {
+                Text("保存", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
 
 @Composable
-private fun KeyButton(
-    key: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun KeyButton(key: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier
-            .height(50.dp)
+        modifier = modifier
+            .height(48.dp)
             .padding(3.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)),
         contentAlignment = Alignment.Center
     ) {
         if (key == "⌫") {
             Icon(Icons.Default.Backspace, null, modifier = Modifier.size(20.dp))
         } else {
-            Text(key, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+            Text(key, fontSize = 19.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

@@ -33,30 +33,30 @@ object BudgetCalculator {
         val daysInMonth = today.lengthOfMonth()
         val dayOfMonth = today.dayOfMonth
         val dailyBase = if (monthBudget > 0) monthBudget / daysInMonth else 0.0
+        val expenseByDay = HashMap<String, Double>(daysInMonth)
 
-        val expenseByDay: Map<String, Double> = monthTransactions
-            .asSequence()
-            .filter { it.type == "expense" }
-            .groupBy { it.date.take(10) }
-            .mapValues { (_, list) -> list.sumOf { it.amount } }
+        for (transaction in monthTransactions) {
+            if (transaction.type != "expense") continue
+            val day = transaction.date.take(10)
+            expenseByDay[day] = (expenseByDay[day] ?: 0.0) + transaction.amount
+        }
 
         var carryOver = 0.0
-        for (d in 1 until dayOfMonth) {
-            val dayStr = today.withDayOfMonth(d).toString()
+        for (day in 1 until dayOfMonth) {
+            val dayStr = today.withDayOfMonth(day).toString()
             val spent = expenseByDay[dayStr] ?: 0.0
-            val available = dailyBase + carryOver
-            carryOver = available - spent
+            carryOver = dailyBase + carryOver - spent
         }
 
         val todayAllowance = dailyBase + carryOver
         val todaySpent = expenseByDay[today.toString()] ?: 0.0
-        val todayRemaining = todayAllowance - todaySpent
-
         val monthSpent = expenseByDay.values.sum()
         val monthRemaining = monthBudget - monthSpent
         val progress = if (monthBudget > 0) {
             (monthSpent / monthBudget).toFloat().coerceIn(0f, 1f)
-        } else 0f
+        } else {
+            0f
+        }
 
         return BudgetState(
             monthBudget = monthBudget,
@@ -67,7 +67,7 @@ object BudgetCalculator {
             dailyBase = dailyBase,
             todayAllowance = todayAllowance,
             todaySpent = todaySpent,
-            todayRemaining = todayRemaining,
+            todayRemaining = todayAllowance - todaySpent,
             monthProgress = progress
         )
     }
