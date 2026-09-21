@@ -25,9 +25,10 @@ class PaymentAccessibilityService : AccessibilityService() {
         "com.tencent.mm",
         "com.eg.android.AlipayGphone"
     )
-    private val successKeywords = listOf("支付成功", "付款成功", "转账成功", "已支付", "成功收款", "成功付款")
-    private var lastFingerprint: String? = null
-    private var lastHandleAt = 0L
+    private var lastAmount = -1.0
+    private var lastName: String? = null
+    private var lastSavedAt = 0L
+    private var lastEventAt = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -44,6 +45,7 @@ class PaymentAccessibilityService : AccessibilityService() {
             serviceInfo = info
         }
         KeepAliveService.start(applicationContext)
+        CaptureNotifier.ensureChannel(applicationContext)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -55,20 +57,29 @@ class PaymentAccessibilityService : AccessibilityService() {
 
             // 节流：界面内容变化事件非常密集，最短间隔处理一次，避免主线程被拖垮触发 ANR
             val now = System.currentTimeMillis()
-            if (now - lastHandleAt < MIN_INTERVAL_MS) return
+            if (now - lastEventAt < MIN_INTERVAL_MS) return
+            lastEventAt = now
 
             val root = rootInActiveWindow ?: return
-            val text = collectText(root, maxNodes = 260, maxDepth = 18)
-            if (text.isBlank() || successKeywords.none { text.contains(it) }) return
-
-            lastHandleAt = now
+            val text = collectText(root, maxNodes = 320, maxDepth = 20)
+            // 待确认制：只要出现交易动作词且能解析出金额就先保留，由用户在待确认页确认/忽略，宁多勿漏
+            if (!PaymentParser.canHandle(text)) return
 
             val parsed = PaymentParser.parse(text)
             val amount = parsed.amount ?: return
 
-            val fingerprint = "${amount}_${parsed.merchant ?: ""}_${now / 10_000}"
-            if (fingerprint == lastFingerprint) return
-            lastFingerprint = fingerprint
+            val label = if (packageName.contains("tencent")) "微信" else "支付宝"
+            val displayName = parsed.merchant ?: "$label${parsed.kind}"
+
+            // 去重：同一金额 + 同一名称在 30 秒内只保留一次
+            if (now - lastSavedAt < DEDUP_WINDOW_MS &&
+                amount == lastAmount && displayName == lastName
+            ) {
+                return
+            }
+            lastSavedAt = now
+            lastAmount = amount
+            lastName = displayName
 
             val app = applicationContext as? LedgerApp ?: return
             scope.launch {
@@ -79,13 +90,19 @@ class PaymentAccessibilityService : AccessibilityService() {
                             source = "accessibility",
                             rawText = text.take(500),
                             parsedAmount = amount,
-                            parsedMerchant = parsed.merchant,
+                            parsedMerchant = displayName,
                             parsedDate = nowIso,
-                            parsedType = "expense",
+                            parsedType = parsed.type,
                             confidence = parsed.confidence,
                             status = "pending",
                             createdAt = nowIso
                         )
+                    )
+                    CaptureNotifier.notifyCaptured(
+                        context = applicationContext,
+                        amount = amount,
+                        kind = parsed.kind,
+                        sourceLabel = "$label页面"
                     )
                 } catch (throwable: Throwable) {
                     Log.e(TAG, "写入待确认账单失败", throwable)
@@ -96,23 +113,19 @@ class PaymentAccessibilityService : AccessibilityService() {
         }
     }
 
-    /** 带节点数与深度上限的文本收集，命中成功关键词后提前结束，避免在主线程长时间遍历导致 ANR */
+    /** 带节点数与深度上限的文本收集，避免在主线程长时间遍历导致 ANR */
     private fun collectText(node: AccessibilityNodeInfo?, maxNodes: Int, maxDepth: Int): String {
         val builder = StringBuilder()
         var count = 0
 
-        fun containsKeyword(): Boolean = successKeywords.any { builder.contains(it) }
-
         fun walk(current: AccessibilityNodeInfo?, depth: Int) {
             if (current == null || count >= maxNodes || depth > maxDepth) return
-            if (containsKeyword()) return
             count++
             current.text?.let { builder.append(it).append(' ') }
             current.contentDescription?.let { builder.append(it).append(' ') }
-            if (containsKeyword()) return
             for (index in 0 until current.childCount) {
                 walk(current.getChild(index), depth + 1)
-                if (containsKeyword() || count >= maxNodes) return
+                if (count >= maxNodes) return
             }
         }
 
@@ -135,5 +148,6 @@ class PaymentAccessibilityService : AccessibilityService() {
     private companion object {
         const val TAG = "PayA11y"
         const val MIN_INTERVAL_MS = 700L
+        const val DEDUP_WINDOW_MS = 30_000L
     }
 }

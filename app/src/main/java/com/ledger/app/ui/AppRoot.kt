@@ -1,5 +1,9 @@
 package com.ledger.app.ui
 
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
@@ -27,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -72,6 +77,12 @@ private val MainBottomItems = listOf(
     BottomItem("settings", "设置", Icons.Default.Settings)
 )
 
+private tailrec fun Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 fun AppRoot() {
     val nav = rememberNavController()
@@ -83,6 +94,32 @@ fun AppRoot() {
     val entry by nav.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route
     val isMainTab = MainBottomItems.any { it.route == currentRoute }
+
+    // 从“识别到交易”的通知点进来时，直接打开待确认页
+    LaunchedEffect(Unit) {
+        val activity = context.findActivity()
+        val intent = activity?.intent
+        if (intent?.getBooleanExtra("go_pending", false) == true) {
+            nav.navigate("pending")
+            intent.removeExtra("go_pending")
+        }
+    }
+
+    // Android 13+ 需要通知权限，否则识别结果通知和保活通知都不显示
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

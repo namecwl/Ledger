@@ -3,8 +3,12 @@ package com.ledger.app.ui.screens
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,13 +47,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ledger.app.BuildConfig
+import com.ledger.app.data.entity.PendingTransaction
+import com.ledger.app.service.ServiceStatus
 import com.ledger.app.ui.components.LedgerCard
 import com.ledger.app.ui.components.LedgerIcon
 import com.ledger.app.ui.components.ScreenHeader
@@ -66,7 +78,22 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val monthlyBudget by vm.monthlyBudget.collectAsStateWithLifecycle()
+    val pendingCount by vm.pendingCount.collectAsStateWithLifecycle()
     var showBudgetDialog by remember { mutableStateOf(false) }
+
+    // 每次回到设置页都重新读取三项授权的实时状态
+    var statusTick by remember { mutableStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) statusTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val notificationOn = remember(statusTick) { ServiceStatus.notificationListenerEnabled(context) }
+    val accessibilityOn = remember(statusTick) { ServiceStatus.accessibilityEnabled(context) }
+    val batteryOn = remember(statusTick) { ServiceStatus.batteryOptimizationIgnored(context) }
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 
@@ -171,6 +198,34 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
         }
 
         item(key = "auto_title") { SectionTitle("自动记账") }
+        item(key = "auto_status") {
+            AutoBookkeepingStatusCard(
+                notificationOn = notificationOn,
+                accessibilityOn = accessibilityOn,
+                batteryOn = batteryOn,
+                pendingCount = pendingCount,
+                onTest = {
+                    scope.launch {
+                        val now = Format.nowIso()
+                        (context.applicationContext as com.ledger.app.LedgerApp).db
+                            .pendingDao().insert(
+                                PendingTransaction(
+                                    source = "test",
+                                    rawText = "自动记账链路测试",
+                                    parsedAmount = 0.01,
+                                    parsedMerchant = "自动记账测试",
+                                    parsedDate = now,
+                                    parsedType = "expense",
+                                    confidence = 0.99,
+                                    status = "pending",
+                                    createdAt = now
+                                )
+                            )
+                        toast("已生成测试记录，请到「待确认」查看")
+                    }
+                }
+            )
+        }
         item(key = "auto_group") {
             LedgerCard(
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -357,6 +412,69 @@ private fun SettingRow(
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
             modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun AutoBookkeepingStatusCard(
+    notificationOn: Boolean,
+    accessibilityOn: Boolean,
+    batteryOn: Boolean,
+    pendingCount: Int,
+    onTest: () -> Unit
+) {
+    LedgerCard(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("自动记账运行状态", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(
+                "待确认 $pendingCount 笔",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        StatusLine("通知监听", notificationOn)
+        StatusLine("无障碍服务", accessibilityOn)
+        StatusLine("后台保活", batteryOn)
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onTest) { Text("发送测试记录") }
+        }
+    }
+}
+
+@Composable
+private fun StatusLine(label: String, enabled: Boolean) {
+    val color = if (enabled) {
+        Color(0xFF2E9E5B)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .size(9.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(Modifier.size(7.dp))
+        Text(
+            if (enabled) "已开启" else "未开启",
+            style = MaterialTheme.typography.labelMedium,
+            color = color
         )
     }
 }

@@ -121,6 +121,7 @@ private fun PendingItem(
     val sourceLabel = when (pending.source) {
         "notification" -> "通知"
         "accessibility" -> "无障碍"
+        "test" -> "测试"
         else -> "自动识别"
     }
 
@@ -207,8 +208,10 @@ private fun ConfirmDialog(
         mutableStateOf(categories.firstOrNull { it.name == "其他" }?.id)
     }
     var selectedAccount by remember { mutableStateOf(accounts.firstOrNull()?.id) }
-    val tops = remember(categories) {
-        categories.filter { it.parentId == null && it.type == "expense" }
+    val txType = pending.parsedType ?: "expense"
+    val tops = remember(categories, txType) {
+        categories.filter { it.parentId == null && it.type == txType }
+            .ifEmpty { categories.filter { it.parentId == null && it.type == "expense" } }
     }
     val subs = remember(categories, selectedCategory) {
         categories.filter { it.parentId == selectedCategory }
