@@ -2,6 +2,7 @@ package com.ledger.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,8 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +64,12 @@ import com.ledger.app.ui.theme.AmountColors
 import com.ledger.app.util.Format
 import com.ledger.app.vm.BillDayUi
 import com.ledger.app.vm.MainViewModel
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.YearMonth
+import java.time.ZoneId
 
 private val InflowTypes = setOf("income", "refund", "reimbursement")
 
@@ -375,11 +384,44 @@ private fun BillEditDialog(
     var amountText by remember { mutableStateOf(transaction.amount.toString()) }
     var remark by remember { mutableStateOf(transaction.remark ?: "") }
     var selectedCategory by remember { mutableStateOf(transaction.categoryId) }
+    val initialDate = remember(transaction.id) {
+        runCatching { LocalDate.parse(transaction.date.take(10)) }.getOrDefault(LocalDate.now())
+    }
+    var pickedDate by remember(transaction.id) { mutableStateOf(initialDate) }
+    var showDatePicker by remember { mutableStateOf(false) }
     val tops = remember(categories, transaction.type) {
         categories.filter { it.parentId == null && it.type == transaction.type }
     }
     val subs = remember(categories, selectedCategory) {
         categories.filter { it.parentId == selectedCategory }
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = pickedDate
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val millis = datePickerState.selectedDateMillis
+                    if (millis != null) {
+                        pickedDate = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                    }
+                    showDatePicker = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 
     AlertDialog(
@@ -393,6 +435,22 @@ private fun BillEditDialog(
                     label = { Text("金额") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = pickedDate.toString(),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("日期") },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(Icons.Default.Today, contentDescription = "选择日期")
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true }
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -437,9 +495,17 @@ private fun BillEditDialog(
         confirmButton = {
             TextButton(onClick = {
                 val amount = amountText.toDoubleOrNull() ?: return@TextButton
+                val originalTime = if (transaction.date.length >= 19) {
+                    runCatching { LocalTime.parse(transaction.date.substring(11, 19)) }
+                        .getOrDefault(LocalTime.MIDNIGHT)
+                } else {
+                    LocalTime.MIDNIGHT
+                }
+                val newDateIso = Format.iso(LocalDateTime.of(pickedDate, originalTime))
                 onConfirm(
                     transaction.copy(
                         amount = amount,
+                        date = newDateIso,
                         remark = remark.ifBlank { null },
                         categoryId = selectedCategory,
                         updatedAt = Format.nowIso()

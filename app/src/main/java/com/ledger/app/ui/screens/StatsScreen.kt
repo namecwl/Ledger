@@ -2,6 +2,7 @@ package com.ledger.app.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,10 +41,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ledger.app.data.entity.Category
+import com.ledger.app.data.entity.Transaction
 import com.ledger.app.ui.components.EmptyState
 import com.ledger.app.ui.components.LedgerCard
 import com.ledger.app.ui.components.ScreenHeader
@@ -49,7 +55,8 @@ import com.ledger.app.ui.components.SectionTitle
 import com.ledger.app.ui.theme.AmountColors
 import com.ledger.app.util.Format
 import com.ledger.app.vm.MainViewModel
-import java.time.YearMonth
+import com.ledger.app.vm.StatsCategoryUi
+import com.ledger.app.vm.StatsGranularity
 
 private val ChartPalette = listOf(
     Color(0xFF16A36A),
@@ -62,16 +69,28 @@ private val ChartPalette = listOf(
     Color(0xFF8B949E)
 )
 
+private fun paletteColor(index: Int): Color = ChartPalette[index % ChartPalette.size]
+
 private data class CategoryStat(
     val name: String,
     val amount: Double,
-    val color: Color
+    val color: Color,
+    val count: Int
 )
 
 @Composable
 fun StatsScreen(vm: MainViewModel) {
     val stats by vm.statsUi.collectAsStateWithLifecycle()
-    val selectedMonth by vm.selectedMonth.collectAsStateWithLifecycle()
+    val period by vm.statsPeriod.collectAsStateWithLifecycle()
+    val granularity by vm.statsGranularity.collectAsStateWithLifecycle()
+
+    var detail by remember { mutableStateOf<StatsCategoryUi?>(null) }
+
+    val selected = detail
+    if (selected != null) {
+        CategoryDetailScreen(vm = vm, category = selected, periodLabel = period.label, onBack = { detail = null })
+        return
+    }
 
     val expenseTotal = stats.expense
     val incomeTotal = stats.income
@@ -80,11 +99,18 @@ fun StatsScreen(vm: MainViewModel) {
             CategoryStat(
                 name = category.name,
                 amount = category.amount,
-                color = ChartPalette[category.colorIndex % ChartPalette.size]
+                color = paletteColor(category.colorIndex),
+                count = category.count
             )
         }
     }
     val balance = incomeTotal - expenseTotal
+    val periodWord = when (granularity) {
+        StatsGranularity.DAY -> "当日"
+        StatsGranularity.WEEK -> "本周"
+        StatsGranularity.MONTH -> "本月"
+        StatsGranularity.YEAR -> "本年"
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -93,14 +119,24 @@ fun StatsScreen(vm: MainViewModel) {
         contentPadding = PaddingValues(bottom = 28.dp)
     ) {
         item(key = "header", contentType = "screen_header") {
-            ScreenHeader(
-                title = "统计",
-                subtitle = "看清每一笔钱的去向",
-                trailing = { MonthControl(month = selectedMonth, onPrev = { vm.selectMonth(selectedMonth.minusMonths(1)) }, onNext = { vm.selectMonth(selectedMonth.plusMonths(1)) }, canGoNext = selectedMonth < YearMonth.now()) }
+            ScreenHeader(title = "统计", subtitle = "看清每一笔钱的去向")
+        }
+        item(key = "granularity", contentType = "granularity") {
+            GranularitySelector(
+                selected = granularity,
+                onSelect = { vm.setStatsGranularity(it) }
+            )
+        }
+        item(key = "period_nav", contentType = "period_nav") {
+            PeriodNavigator(
+                label = period.label,
+                canGoNext = period.canGoNext,
+                onPrev = { vm.shiftStatsPeriod(-1) },
+                onNext = { vm.shiftStatsPeriod(1) }
             )
         }
         item(key = "summary", contentType = "summary") {
-            StatsSummaryCard(expense = expenseTotal, income = incomeTotal, balance = balance)
+            StatsSummaryCard(periodWord = periodWord, expense = expenseTotal, income = income, balance = balance)
         }
         item(key = "chart", contentType = "chart") {
             BreakdownChartCard(stats = categoryStats, expenseTotal = expenseTotal)
@@ -113,7 +149,7 @@ fun StatsScreen(vm: MainViewModel) {
             item(key = "empty", contentType = "empty") {
                 EmptyState(
                     emoji = "📊",
-                    title = "本月还没有支出",
+                    title = "${periodWord}还没有支出",
                     subtitle = "记录支出后，这里会自动生成分类占比"
                 )
             }
@@ -123,17 +159,19 @@ fun StatsScreen(vm: MainViewModel) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
-                    categoryStats.forEachIndexed { index, stat ->
+                    stats.categories.forEachIndexed { index, category ->
                         if (index > 0) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 62.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
                             )
                         }
+                        val stat = categoryStats[index]
                         CategoryStatRow(
                             rank = index + 1,
                             stat = stat,
-                            fraction = if (expenseTotal > 0) stat.amount / expenseTotal else 0.0
+                            fraction = if (expenseTotal > 0) stat.amount / expenseTotal else 0.0,
+                            onClick = { detail = category }
                         )
                     }
                 }
@@ -143,39 +181,73 @@ fun StatsScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun MonthControl(
-    month: YearMonth,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    canGoNext: Boolean
-) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surfaceVariant
+private fun GranularitySelector(selected: StatsGranularity, onSelect: (StatsGranularity) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPrev, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "上月", modifier = Modifier.size(19.dp))
-            }
-            Text(
-                "${month.monthValue}月",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-            IconButton(onClick = onNext, enabled = canGoNext, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "下月", modifier = Modifier.size(19.dp))
+        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatsGranularity.values().forEach { granularity ->
+                    val isSelected = granularity == selected
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { onSelect(granularity) }
+                            .padding(horizontal = 22.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            granularity.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StatsSummaryCard(expense: Double, income: Double, balance: Double) {
+private fun PeriodNavigator(label: String, canGoNext: Boolean, onPrev: () -> Unit, onNext: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPrev, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.ChevronLeft, contentDescription = "上一周期", modifier = Modifier.size(20.dp))
+                }
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                    textAlign = TextAlign.Center
+                )
+                IconButton(onClick = onNext, enabled = canGoNext, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = "下一周期", modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsSummaryCard(periodWord: String, expense: Double, income: Double, balance: Double) {
     LedgerCard(
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         contentPadding = PaddingValues(20.dp)
     ) {
-        Text("本月支出", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${periodWord}支出", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         Text(
             "¥${Format.money(expense)}",
@@ -297,60 +369,287 @@ private fun LegendRow(stat: CategoryStat, total: Double) {
 }
 
 @Composable
-private fun CategoryStatRow(rank: Int, stat: CategoryStat, fraction: Double) {
+private fun CategoryStatRow(rank: Int, stat: CategoryStat, fraction: Double, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = 15.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(stat.color.copy(alpha = 0.13f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("$rank", color = stat.color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stat.name,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "¥${Format.money(stat.amount)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(7.dp))
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(stat.color.copy(alpha = 0.13f)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(stat.color.copy(alpha = 0.12f))
             ) {
-                Text("$rank", color = stat.color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction.toFloat().coerceIn(0f, 1f))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(stat.color)
+                )
             }
-            Spacer(Modifier.width(11.dp))
-            Column(modifier = Modifier.weight(1f)) {
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "${Format.percent(fraction)}%",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = "查看${stat.name}明细",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/** 分类明细下钻页：钱迹风格，展示该分类在当前周期的汇总、子分类占比与逐笔流水 */
+@Composable
+private fun CategoryDetailScreen(
+    vm: MainViewModel,
+    category: StatsCategoryUi,
+    periodLabel: String,
+    onBack: () -> Unit
+) {
+    val categories by vm.categories.collectAsStateWithLifecycle()
+    val stats by vm.statsUi.collectAsStateWithLifecycle()
+    val categoryMap = remember(categories) { categories.associateBy { it.id } }
+    val color = paletteColor(category.colorIndex)
+    val totalExpense = stats.expense
+    val share = if (totalExpense > 0) category.amount / totalExpense else 0.0
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(bottom = 28.dp)
+    ) {
+        item(key = "detail_header") {
+            ScreenHeader(title = category.name, subtitle = periodLabel, onBack = onBack)
+        }
+        item(key = "detail_summary") {
+            LedgerCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(20.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stat.name,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "¥${Format.money(stat.amount)}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = 0.13f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("${(share * 100).let { kotlin.math.round(it).toInt() }}%", color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("支出合计", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "¥${Format.money(category.amount)}",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = AmountColors.Expense
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("笔数", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${category.count} 笔", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
                 }
-                Spacer(Modifier.height(7.dp))
+                Spacer(Modifier.height(12.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
+                        .height(8.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(stat.color.copy(alpha = 0.12f))
+                        .background(color.copy(alpha = 0.12f))
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(fraction.toFloat().coerceIn(0f, 1f))
-                            .height(6.dp)
+                            .fillMaxWidth(share.toFloat().coerceIn(0f, 1f))
+                            .height(8.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(stat.color)
+                            .background(color)
                     )
                 }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "占总支出 ${Format.percent(share)}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Spacer(Modifier.width(12.dp))
-            Text(
-                "${Format.percent(fraction)}%",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        }
+
+        if (category.children.size > 1) {
+            item(key = "sub_title") { SectionTitle("子分类") }
+            item(key = "sub_list") {
+                LedgerCard(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    category.children.forEachIndexed { index, child ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 16.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        SubCategoryRow(
+                            name = child.name,
+                            amount = child.amount,
+                            fraction = if (category.amount > 0) child.amount / category.amount else 0.0,
+                            color = paletteColor(child.colorIndex + 1)
+                        )
+                    }
+                }
+            }
+        }
+
+        item(key = "tx_title") { SectionTitle("明细流水（${category.count} 笔）") }
+        if (category.transactions.isEmpty()) {
+            item(key = "tx_empty") {
+                EmptyState(emoji = "🧾", title = "暂无明细", subtitle = "该周期内这个分类还没有账单")
+            }
+        } else {
+            item(key = "tx_list") {
+                LedgerCard(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
+                ) {
+                    category.transactions.forEachIndexed { index, tx ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 64.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        DetailTransactionRow(transaction = tx, categoryMap = categoryMap)
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun SubCategoryRow(name: String, amount: Double, fraction: Double, color: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("¥${Format.money(amount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(7.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(color.copy(alpha = 0.12f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction.toFloat().coerceIn(0f, 1f))
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(color)
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "${Format.percent(fraction)}%",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun DetailTransactionRow(transaction: Transaction, categoryMap: Map<Long, Category>) {
+    val category = transaction.categoryId?.let(categoryMap::get)
+    val parent = category?.parentId?.let(categoryMap::get)
+    val icon = parent?.icon ?: category?.icon ?: "📝"
+    val label = when {
+        parent != null -> category?.name ?: parent.name
+        category != null -> category.name
+        else -> "未分类"
+    }
+    val subtitle = buildString {
+        append(Format.timeOf(transaction.date))
+        if (!transaction.remark.isNullOrBlank()) append(" · ${transaction.remark}")
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(icon, fontSize = 17.sp)
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "-¥${Format.money(transaction.amount)}",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp
+        )
+    }
+}

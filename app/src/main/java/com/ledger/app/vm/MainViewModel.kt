@@ -41,16 +41,43 @@ data class BillsMonthUi(
     val income: Double = 0.0
 )
 
-data class StatsCategoryUi(
+data class StatsSubCategoryUi(
     val name: String,
     val amount: Double,
     val colorIndex: Int
 )
 
-data class StatsMonthUi(
+data class StatsCategoryUi(
+    val name: String,
+    val amount: Double,
+    val colorIndex: Int,
+    val count: Int = 0,
+    val children: List<StatsSubCategoryUi> = emptyList(),
+    val transactions: List<Transaction> = emptyList()
+)
+
+data class StatsUi(
     val expense: Double = 0.0,
     val income: Double = 0.0,
     val categories: List<StatsCategoryUi> = emptyList()
+)
+
+/** 统计时间粒度：日 / 周 / 月 / 年 */
+enum class StatsGranularity(val label: String) {
+    DAY("日"),
+    WEEK("周"),
+    MONTH("月"),
+    YEAR("年")
+}
+
+/** 当前统计周期：[start, end) 为半开区间，label 为顶部标题，canGoNext 控制能否向后翻页 */
+data class StatsPeriod(
+    val granularity: StatsGranularity,
+    val anchor: LocalDate,
+    val start: LocalDate,
+    val end: LocalDate,
+    val label: String,
+    val canGoNext: Boolean
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -101,14 +128,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, BillsMonthUi())
 
-    val statsUi: StateFlow<StatsMonthUi> = combine(monthTransactions, categories) { transactions, categoryList ->
-        buildStatsMonthUi(transactions, categoryList)
+    private val _statsGranularity = MutableStateFlow(StatsGranularity.MONTH)
+    val statsGranularity: StateFlow<StatsGranularity> = _statsGranularity
+
+    private val _statsAnchor = MutableStateFlow(LocalDate.now())
+    val statsAnchor: StateFlow<LocalDate> = _statsAnchor
+
+    val statsPeriod: StateFlow<StatsPeriod> =
+        combine(_statsGranularity, _statsAnchor) { granularity, anchor ->
+            buildPeriod(granularity, anchor)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, buildPeriod(StatsGranularity.MONTH, LocalDate.now()))
+
+    private val statsRangeTransactions: StateFlow<List<Transaction>> = statsPeriod
+        .flatMapLatest { period ->
+            repo.observeTransactionsByRange(period.start.toString(), period.end.toString())
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val statsUi: StateFlow<StatsUi> = combine(statsRangeTransactions, categories) { transactions, categoryList ->
+        buildStatsUi(transactions, categoryList)
     }
         .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, StatsMonthUi())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, StatsUi())
 
     fun selectMonth(month: YearMonth) {
         if (_selectedMonth.value != month) _selectedMonth.value = month
+    }
+
+    fun setStatsGranularity(granularity: StatsGranularity) {
+        if (_statsGranularity.value != granularity) {
+            _statsGranularity.value = granularity
+            _statsAnchor.value = LocalDate.now()
+        }
+    }
+
+    /** 统计页向前 / 向后翻一个周期（delta 为 -1 或 +1） */
+    fun shiftStatsPeriod(delta: Int) {
+        val granularity = _statsGranularity.value
+        val next = when (granularity) {
+            StatsGranularity.DAY -> _statsAnchor.value.plusDays(delta.toLong())
+            StatsGranularity.WEEK -> _statsAnchor.value.plusWeeks(delta.toLong())
+            StatsGranularity.MONTH -> _statsAnchor.value.plusMonths(delta.toLong())
+            StatsGranularity.YEAR -> _statsAnchor.value.plusYears(delta.toLong())
+        }
+        _statsAnchor.value = next
     }
 
     private val _monthlyBudget = MutableStateFlow(prefs.getFloat("monthly_budget", 0f).toDouble())
@@ -218,33 +281,113 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return BillsMonthUi(days, monthExpense, monthIncome)
         }
 
-        fun buildStatsMonthUi(
+        fun buildStatsUi(
             transactions: List<Transaction>,
             categories: List<Category>
-        ): StatsMonthUi {
-            if (transactions.isEmpty()) return StatsMonthUi()
+        ): StatsUi {
+            if (transactions.isEmpty()) return StatsUi()
             val categoryMap = categories.associateBy { it.id }
             var expenseTotal = 0.0
             var incomeTotal = 0.0
-            val grouped = HashMap<String, Double>()
+            val amounts = LinkedHashMap<String, Double>()
+            val bucketTx = LinkedHashMap<String, MutableList<Transaction>>()
+            val subAmounts = LinkedHashMap<String, LinkedHashMap<String, Double>>()
             for (transaction in transactions) {
                 when (transaction.type) {
                     "expense" -> {
                         expenseTotal += transaction.amount
                         val category = transaction.categoryId?.let(categoryMap::get)
                         val parent = category?.parentId?.let(categoryMap::get)
-                        val name = parent?.name ?: category?.name ?: "未分类"
-                        grouped[name] = (grouped[name] ?: 0.0) + transaction.amount
+                        val topName = parent?.name ?: category?.name ?: "未分类"
+                        val subName = if (parent != null) category?.name else null
+                        amounts[topName] = (amounts[topName] ?: 0.0) + transaction.amount
+                        bucketTx.getOrPut(topName) { mutableListOf() }.add(transaction)
+                        if (subName != null) {
+                            val subs = subAmounts.getOrPut(topName) { LinkedHashMap() }
+                            subs[subName] = (subs[subName] ?: 0.0) + transaction.amount
+                        }
                     }
-                    "income", "refund", "reimbursement" -> incomeTotal += transaction.amount
+                    in InflowTypes -> incomeTotal += transaction.amount
                 }
             }
-            val categoryStats = grouped.entries
+            val categoryStats = amounts.entries
                 .sortedByDescending { it.value }
                 .mapIndexed { index, entry ->
-                    StatsCategoryUi(entry.key, entry.value, index)
+                    val name = entry.key
+                    val txList = (bucketTx[name] ?: emptyList()).sortedByDescending { it.date }
+                    val children = (subAmounts[name] ?: LinkedHashMap())
+                        .entries
+                        .sortedByDescending { it.value }
+                        .mapIndexed { childIndex, child ->
+                            StatsSubCategoryUi(child.key, child.value, childIndex)
+                        }
+                    StatsCategoryUi(
+                        name = name,
+                        amount = entry.value,
+                        colorIndex = index,
+                        count = txList.size,
+                        children = children,
+                        transactions = txList
+                    )
                 }
-            return StatsMonthUi(expenseTotal, incomeTotal, categoryStats)
+            return StatsUi(expenseTotal, incomeTotal, categoryStats)
+        }
+
+        fun buildPeriod(granularity: StatsGranularity, anchor: LocalDate): StatsPeriod {
+            val today = LocalDate.now()
+            val start: LocalDate
+            val end: LocalDate
+            when (granularity) {
+                StatsGranularity.DAY -> {
+                    start = anchor
+                    end = anchor.plusDays(1)
+                }
+                StatsGranularity.WEEK -> {
+                    start = anchor.minusDays((anchor.dayOfWeek.value - 1).toLong())
+                    end = start.plusWeeks(1)
+                }
+                StatsGranularity.MONTH -> {
+                    start = anchor.withDayOfMonth(1)
+                    end = start.plusMonths(1)
+                }
+                StatsGranularity.YEAR -> {
+                    start = anchor.withDayOfYear(1)
+                    end = start.plusYears(1)
+                }
+            }
+            val label = when (granularity) {
+                StatsGranularity.DAY -> {
+                    val week = "周${WeekNames[anchor.dayOfWeek.value - 1]}"
+                    "${anchor.year}年${anchor.monthValue}月${anchor.dayOfMonth}日 $week"
+                }
+                StatsGranularity.WEEK -> {
+                    val last = end.minusDays(1)
+                    when {
+                        start.year != last.year ->
+                            "${start.year}年${start.monthValue}月${start.dayOfMonth}日 - ${last.year}年${last.monthValue}月${last.dayOfMonth}日"
+                        start.monthValue != last.monthValue ->
+                            "${start.monthValue}月${start.dayOfMonth}日 - ${last.monthValue}月${last.dayOfMonth}日"
+                        else ->
+                            "${start.monthValue}月${start.dayOfMonth}日 - ${last.dayOfMonth}日"
+                    }
+                }
+                StatsGranularity.MONTH -> "${start.year}年${start.monthValue}月"
+                StatsGranularity.YEAR -> "${start.year}年"
+            }
+            val nextStart = when (granularity) {
+                StatsGranularity.DAY -> start.plusDays(1)
+                StatsGranularity.WEEK -> start.plusWeeks(1)
+                StatsGranularity.MONTH -> start.plusMonths(1)
+                StatsGranularity.YEAR -> start.plusYears(1)
+            }
+            return StatsPeriod(
+                granularity = granularity,
+                anchor = anchor,
+                start = start,
+                end = end,
+                label = label,
+                canGoNext = !nextStart.isAfter(today)
+            )
         }
     }
 }
