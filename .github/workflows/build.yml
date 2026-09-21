@@ -36,6 +36,15 @@ jobs:
           name: Ledger-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
 
+      - name: Build Performance APK
+        run: gradle assemblePerformance --no-daemon
+
+      - name: Upload Performance APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ledger-Performance-APK
+          path: app/build/outputs/apk/performance/*.apk
+
       - name: Decode Release Keystore
         if: env.LEDGER_KEYSTORE_BASE64 != ''
         run: echo "$LEDGER_KEYSTORE_BASE64" | base64 --decode > release.keystore

@@ -1,8 +1,17 @@
 package com.ledger.app.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -12,25 +21,22 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -83,14 +89,15 @@ fun AppRoot() {
         bottomBar = {
             if (isMainTab) {
                 LedgerBottomBar(
-                    items = MainBottomItems,
                     currentRoute = currentRoute,
                     pendingCount = pendingCount,
                     onSelect = { route ->
-                        nav.navigate(route) {
-                            popUpTo(nav.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
+                        if (route != currentRoute) {
+                            nav.navigate(route) {
+                                popUpTo(nav.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     }
                 )
@@ -102,7 +109,11 @@ fun AppRoot() {
             startDestination = "record",
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable("record") { RecordScreen(vm) }
             composable("bills") { BillsScreen(vm) }
@@ -131,70 +142,85 @@ fun AppRoot() {
 
 @Composable
 private fun LedgerBottomBar(
-    items: List<BottomItem>,
     currentRoute: String?,
     pendingCount: Int,
     onSelect: (String) -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 14.dp
+        shadowElevation = 8.dp
     ) {
-        NavigationBar(
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(66.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items.forEach { item ->
+            MainBottomItems.forEach { item ->
                 val selected = currentRoute == item.route
                 val isRecord = item.route == "record"
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { onSelect(item.route) },
-                    icon = {
-                        val icon: @Composable () -> Unit = {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.label,
-                                modifier = if (isRecord) Modifier.size(23.dp) else Modifier.size(22.dp)
-                            )
-                        }
-                        if (item.route == "pending" && pendingCount > 0) {
-                            BadgedBox(badge = { Badge { Text(if (pendingCount > 99) "99+" else "$pendingCount") } }) {
-                                icon()
-                            }
-                        } else if (isRecord) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clickable { onSelect(item.route) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isRecord) {
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(
                                         if (selected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.primaryContainer
                                     ),
-                                contentAlignment = androidx.compose.ui.Alignment.Center
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = item.label,
                                     tint = if (selected) MaterialTheme.colorScheme.onPrimary
                                     else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         } else {
-                            icon()
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = item.label,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(21.dp)
+                            )
                         }
-                    },
-                    label = { Text(item.label) },
-                    alwaysShowLabel = true,
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (item.route == "pending" && pendingCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .background(MaterialTheme.colorScheme.error, CircleShape)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    if (pendingCount > 99) "99+" else "$pendingCount",
+                                    color = MaterialTheme.colorScheme.onError,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        item.label,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                     )
-                )
+                }
             }
         }
     }

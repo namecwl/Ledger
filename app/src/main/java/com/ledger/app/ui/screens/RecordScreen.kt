@@ -42,7 +42,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,21 +98,12 @@ fun RecordScreen(vm: MainViewModel) {
     val tops = remember(categories, type) {
         categories.filter { it.parentId == null && it.type == type }
     }
-    val subs = remember(categories, selectedTop) {
-        categories.filter { it.parentId == selectedTop }
+    val activeTop = selectedTop?.takeIf { id -> tops.any { it.id == id } } ?: tops.firstOrNull()?.id
+    val subs = remember(categories, activeTop) {
+        categories.filter { it.parentId == activeTop }
     }
-
-    LaunchedEffect(tops) {
-        if (tops.none { it.id == selectedTop }) {
-            selectedTop = tops.firstOrNull()?.id
-            selectedSub = null
-        }
-    }
-    LaunchedEffect(accounts) {
-        if (selectedAccount == null || accounts.none { it.id == selectedAccount }) {
-            selectedAccount = accounts.firstOrNull()?.id
-        }
-    }
+    val activeAccount = selectedAccount?.takeIf { id -> accounts.any { it.id == id } }
+        ?: accounts.firstOrNull()?.id
 
     val isExpense = type == "expense"
     val amountColor by animateColorAsState(
@@ -224,7 +214,7 @@ fun RecordScreen(vm: MainViewModel) {
                     tops.forEach { category ->
                         CategoryCell(
                             category = category,
-                            selected = selectedTop == category.id,
+                            selected = activeTop == category.id,
                             onClick = {
                                 selectedTop = category.id
                                 selectedSub = null
@@ -259,7 +249,7 @@ fun RecordScreen(vm: MainViewModel) {
             ActionBar(
                 remark = remark,
                 dateTime = pickedDateTime,
-                accountName = accounts.firstOrNull { it.id == selectedAccount }?.name ?: "账户",
+                accountName = accounts.firstOrNull { it.id == activeAccount }?.name ?: "账户",
                 onRemark = { showRemarkDialog = true },
                 onDateTime = { pickDateTime(context, pickedDateTime) { pickedDateTime = it } },
                 onAccount = { showAccountDialog = true }
@@ -287,7 +277,7 @@ fun RecordScreen(vm: MainViewModel) {
                         Transaction(
                             type = type,
                             amount = parsedAmount,
-                            categoryId = selectedSub ?: selectedTop,
+                            categoryId = selectedSub ?: activeTop,
                             accountId = selectedAccount,
                             date = iso,
                             remark = remark.ifBlank { null },

@@ -15,7 +15,7 @@ Android 只有在 **applicationId 相同** 且 **签名证书相同** 时，才�
    - `LEDGER_KEYSTORE_PASSWORD`
    - `LEDGER_KEY_ALIAS`
    - `LEDGER_KEY_PASSWORD`
-4. 推送 `v1.4.0` 形式的 tag，工作流会构建签名 release APK，并自动上传到 GitHub Release。
+4. 推送 `v1.4.1` 形式的 tag，工作流会构建签名 release APK，并自动上传到 GitHub Release。
 
 PowerShell 生成示例：
 
@@ -70,3 +70,20 @@ LEDGER_KEYSTORE_BASE64=剪贴板内容
 ```
 
 这样首次 GitHub Release 也能尽量使用旧版相同签名。debug key 不适合公开项目长期使用，但在个人本地应用中可用于保留数据平滑升级。
+## 性能构建
+
+GitHub Actions 现在会额外生成 `Ledger-Performance-APK`。它关闭 debuggable、启用 R8 和资源压缩，运行速度明显优于普通 `app-debug.apk`。
+
+本地也可以直接执行：
+
+```powershell
+gradle assemblePerformance
+```
+
+输出位置：
+
+```text
+app/build/outputs/apk/performance/
+```
+
+日常体验请优先安装 Performance 或 Release APK，不建议用未优化的 Debug APK 评价流畅度。

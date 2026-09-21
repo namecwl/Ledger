@@ -19,8 +19,8 @@ android {
         applicationId = "com.ledger.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.4.0"
+        versionCode = 3
+        versionName = "1.4.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -40,6 +40,18 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfigs.findByName("release")?.let { signingConfig = it }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+
+        create("performance") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -1,6 +1,5 @@
 package com.ledger.app.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,7 +28,6 @@ import com.ledger.app.util.Format
 
 @Composable
 fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
-    val progress by animateFloatAsState(state.monthProgress, label = "budget_progress")
     val todayColor = when {
         state.todayRemaining < 0 -> AmountColors.Expense
         state.todayRemaining < state.dailyBase * 0.3 -> AmountColors.Warning
@@ -38,17 +35,10 @@ fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
     }
     val progressColor = if (state.monthProgress > 0.9f) AmountColors.Expense else MaterialTheme.colorScheme.primary
 
-    LedgerCard(
-        modifier = modifier,
-        contentPadding = PaddingValues(18.dp)
-    ) {
+    LedgerCard(modifier = modifier, contentPadding = PaddingValues(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "今日可花",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("今日可花", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "¥${Format.money(state.todayAllowance.coerceAtLeast(0.0))}",
@@ -58,10 +48,7 @@ fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
                     color = todayColor
                 )
             }
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = progressColor.copy(alpha = 0.11f)
-            ) {
+            Surface(shape = RoundedCornerShape(50), color = progressColor.copy(alpha = 0.11f)) {
                 Text(
                     "${Format.percent(state.monthProgress.toDouble())}%",
                     style = MaterialTheme.typography.labelLarge,
@@ -70,7 +57,6 @@ fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
                 )
             }
         }
-
         Spacer(Modifier.height(14.dp))
         Box(
             modifier = Modifier
@@ -81,29 +67,17 @@ fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .fillMaxWidth(state.monthProgress.coerceIn(0f, 1f))
                     .height(7.dp)
                     .clip(RoundedCornerShape(50))
                     .background(progressColor)
             )
         }
         Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "本月已花 ¥${Format.money(state.monthSpent)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "预算 ¥${Format.money(state.monthBudget)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("本月已花 ¥${Format.money(state.monthSpent)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("预算 ¥${Format.money(state.monthBudget)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-
         Spacer(Modifier.height(14.dp))
         Row(
             modifier = Modifier
@@ -115,11 +89,7 @@ fun BudgetCard(state: BudgetState, modifier: Modifier = Modifier) {
         ) {
             MiniStat("今日已花", "¥${Format.money(state.todaySpent)}")
             MiniStat("基础额度", "¥${Format.money(state.dailyBase)}")
-            MiniStat(
-                "今日剩余",
-                "¥${Format.money(state.todayRemaining)}",
-                if (state.todayRemaining < 0) AmountColors.Expense else null
-            )
+            MiniStat("今日剩余", "¥${Format.money(state.todayRemaining)}", if (state.todayRemaining < 0) AmountColors.Expense else null)
         }
     }
 }
@@ -129,10 +99,6 @@ private fun MiniStat(label: String, value: String, valueColor: Color? = null) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(3.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.labelLarge,
-            color = valueColor ?: MaterialTheme.colorScheme.onSurface
-        )
+        Text(value, style = MaterialTheme.typography.labelLarge, color = valueColor ?: MaterialTheme.colorScheme.onSurface)
     }
 }

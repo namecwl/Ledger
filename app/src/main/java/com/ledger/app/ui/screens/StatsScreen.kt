@@ -15,12 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ledger.app.data.entity.Transaction
 import com.ledger.app.ui.components.EmptyState
 import com.ledger.app.ui.components.LedgerCard
 import com.ledger.app.ui.components.ScreenHeader
@@ -71,39 +70,20 @@ private data class CategoryStat(
 
 @Composable
 fun StatsScreen(vm: MainViewModel) {
-    val transactions by vm.monthTransactions.collectAsStateWithLifecycle()
-    val categories by vm.categories.collectAsStateWithLifecycle()
+    val stats by vm.statsUi.collectAsStateWithLifecycle()
     val selectedMonth by vm.selectedMonth.collectAsStateWithLifecycle()
 
-    val statsData = remember(transactions, categories) {
-        val categoryMap = categories.associateBy { it.id }
-        var expenseTotal = 0.0
-        var incomeTotal = 0.0
-        val grouped = HashMap<String, Double>()
-
-        for (transaction in transactions) {
-            when (transaction.type) {
-                "expense" -> {
-                    expenseTotal += transaction.amount
-                    val category = transaction.categoryId?.let(categoryMap::get)
-                    val parent = category?.parentId?.let(categoryMap::get)
-                    val name = parent?.name ?: category?.name ?: "未分类"
-                    grouped[name] = (grouped[name] ?: 0.0) + transaction.amount
-                }
-                "income", "refund", "reimbursement" -> incomeTotal += transaction.amount
-            }
+    val expenseTotal = stats.expense
+    val incomeTotal = stats.income
+    val categoryStats = remember(stats.categories) {
+        stats.categories.map { category ->
+            CategoryStat(
+                name = category.name,
+                amount = category.amount,
+                color = ChartPalette[category.colorIndex % ChartPalette.size]
+            )
         }
-
-        val sorted = grouped.entries
-            .sortedByDescending { it.value }
-            .mapIndexed { index, entry ->
-                CategoryStat(entry.key, entry.value, ChartPalette[index % ChartPalette.size])
-            }
-        Triple(expenseTotal, incomeTotal, sorted)
     }
-    val expenseTotal = statsData.first
-    val incomeTotal = statsData.second
-    val categoryStats = statsData.third
     val balance = incomeTotal - expenseTotal
 
     LazyColumn(
@@ -138,12 +118,25 @@ fun StatsScreen(vm: MainViewModel) {
                 )
             }
         } else {
-            itemsIndexed(categoryStats, key = { _, stat -> stat.name }, contentType = { _, _ -> "category_stat" }) { index, stat ->
-                CategoryStatCard(
-                    rank = index + 1,
-                    stat = stat,
-                    fraction = if (expenseTotal > 0) stat.amount / expenseTotal else 0.0
-                )
+            item(key = "category_list", contentType = "category_list") {
+                LedgerCard(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    categoryStats.forEachIndexed { index, stat ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 62.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        CategoryStatRow(
+                            rank = index + 1,
+                            stat = stat,
+                            fraction = if (expenseTotal > 0) stat.amount / expenseTotal else 0.0
+                        )
+                    }
+                }
             }
         }
     }
@@ -304,12 +297,13 @@ private fun LegendRow(stat: CategoryStat, total: Double) {
 }
 
 @Composable
-private fun CategoryStatCard(rank: Int, stat: CategoryStat, fraction: Double) {
-    LedgerCard(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-        contentPadding = PaddingValues(horizontal = 15.dp, vertical = 13.dp)
+private fun CategoryStatRow(rank: Int, stat: CategoryStat, fraction: Double) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 15.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(38.dp)
@@ -360,4 +354,3 @@ private fun CategoryStatCard(rank: Int, stat: CategoryStat, fraction: Double) {
             )
         }
     }
-}

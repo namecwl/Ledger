@@ -1,6 +1,5 @@
 package com.ledger.app.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -29,6 +28,7 @@ import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,36 +58,23 @@ import com.ledger.app.ui.components.LedgerCard
 import com.ledger.app.ui.components.ScreenHeader
 import com.ledger.app.ui.theme.AmountColors
 import com.ledger.app.util.Format
+import com.ledger.app.vm.BillDayUi
 import com.ledger.app.vm.MainViewModel
-import java.time.LocalDate
 import java.time.YearMonth
 
 private val InflowTypes = setOf("income", "refund", "reimbursement")
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BillsScreen(vm: MainViewModel) {
     val categories by vm.categories.collectAsStateWithLifecycle()
-    val transactions by vm.monthTransactions.collectAsStateWithLifecycle()
+    val bills by vm.billsUi.collectAsStateWithLifecycle()
     val currentMonth by vm.selectedMonth.collectAsStateWithLifecycle()
     val budgetState by vm.budgetState.collectAsStateWithLifecycle()
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
-    val grouped = remember(transactions) {
-        transactions
-            .groupBy { it.date.take(10) }
-            .toList()
-            .sortedByDescending { it.first }
-    }
-    val totals = remember(transactions) {
-        var expense = 0.0
-        var income = 0.0
-        for (transaction in transactions) {
-            if (transaction.type == "expense") expense += transaction.amount
-            if (transaction.type in InflowTypes) income += transaction.amount
-        }
-        expense to income
-    }
+    val days = bills.days
+    val totals = bills.expense to bills.income
 
     var editing by remember { mutableStateOf<Transaction?>(null) }
     var deleting by remember { mutableStateOf<Transaction?>(null) }
@@ -98,7 +85,7 @@ fun BillsScreen(vm: MainViewModel) {
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(bottom = 28.dp)
     ) {
-        item(key = "header", contentType = "screen_header") {
+        item(key = "header", contentType = "header") {
             ScreenHeader(
                 title = "账单",
                 subtitle = "每一笔收支，都清晰可见",
@@ -111,7 +98,6 @@ fun BillsScreen(vm: MainViewModel) {
                 }
             )
         }
-
         item(key = "month_nav", contentType = "month_nav") {
             MonthNavigator(
                 month = currentMonth,
@@ -120,7 +106,6 @@ fun BillsScreen(vm: MainViewModel) {
                 canGoNext = currentMonth < YearMonth.now()
             )
         }
-
         item(key = "summary", contentType = "summary") {
             SummaryHero(
                 month = currentMonth,
@@ -128,7 +113,6 @@ fun BillsScreen(vm: MainViewModel) {
                 income = totals.second
             )
         }
-
         if (budgetState != null && currentMonth == YearMonth.now()) {
             item(key = "budget", contentType = "budget") {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
@@ -136,8 +120,7 @@ fun BillsScreen(vm: MainViewModel) {
                 }
             }
         }
-
-        if (grouped.isEmpty()) {
+        if (days.isEmpty()) {
             item(key = "empty", contentType = "empty") {
                 EmptyState(
                     emoji = "🧾",
@@ -146,12 +129,12 @@ fun BillsScreen(vm: MainViewModel) {
                 )
             }
         } else {
-            grouped.forEach { (day, dayTransactions) ->
-                stickyHeader(key = "header_$day", contentType = "day_header") {
-                    DayHeader(day, dayTransactions)
+            days.forEach { day ->
+                item(key = "day_${day.date}", contentType = "day_header") {
+                    DayHeader(day)
                 }
-                items(dayTransactions, key = { it.id }, contentType = { "bill" }) { transaction ->
-                    BillItem(
+                items(day.transactions, key = { it.id }, contentType = { "bill" }) { transaction ->
+                    BillRow(
                         transaction = transaction,
                         categoryMap = categoryMap,
                         onClick = { editing = transaction },
@@ -178,9 +161,7 @@ fun BillsScreen(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("删除这条账单？") },
-            text = {
-                Text("${transaction.remark ?: "无备注"} · ¥${Format.money(transaction.amount)}")
-            },
+            text = { Text("${transaction.remark ?: "无备注"} · ¥${Format.money(transaction.amount)}") },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteTransaction(transaction)
@@ -208,16 +189,13 @@ private fun MonthNavigator(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
+        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPrev) {
                     Icon(Icons.Default.ChevronLeft, contentDescription = "上月")
                 }
                 Text(
-                    text = "${month.year}年${month.monthValue}月",
+                    "${month.year}年${month.monthValue}月",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
@@ -239,10 +217,7 @@ private fun SummaryHero(month: YearMonth, expense: Double, income: Double) {
             .clip(MaterialTheme.shapes.extraLarge)
             .background(
                 Brush.linearGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary,
-                        Color(0xFF0C7D51)
-                    )
+                    listOf(MaterialTheme.colorScheme.primary, Color(0xFF0C7D51))
                 )
             )
             .padding(horizontal = 20.dp, vertical = 20.dp)
@@ -255,7 +230,7 @@ private fun SummaryHero(month: YearMonth, expense: Double, income: Double) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "¥${Format.money(balance)}",
+                "¥${Format.money(balance)}",
                 style = MaterialTheme.typography.displaySmall,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
@@ -282,48 +257,30 @@ private fun SummaryMetric(label: String, amount: Double, modifier: Modifier = Mo
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
         Spacer(Modifier.height(3.dp))
-        Text(
-            "¥${Format.money(amount)}",
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White
-        )
+        Text("¥${Format.money(amount)}", style = MaterialTheme.typography.titleMedium, color = Color.White)
     }
 }
 
 @Composable
-private fun DayHeader(day: String, transactions: List<Transaction>) {
-    val totals = remember(transactions) {
-        var expense = 0.0
-        var income = 0.0
-        for (transaction in transactions) {
-            if (transaction.type == "expense") expense += transaction.amount
-            if (transaction.type in InflowTypes) income += transaction.amount
-        }
-        expense to income
-    }
-    val date = remember(day) { runCatching { LocalDate.parse(day) }.getOrNull() }
-    val weekText = date?.let {
-        "周" + listOf("一", "二", "三", "四", "五", "六", "日")[it.dayOfWeek.value - 1]
-    }.orEmpty()
-
+private fun DayHeader(day: BillDayUi) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))
-            .padding(horizontal = 20.dp, vertical = 11.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(Format.shortDay(day), style = MaterialTheme.typography.titleSmall)
+            Text(Format.shortDay(day.date), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.width(6.dp))
-            Text(weekText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(day.week, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         val summary = buildString {
-            if (totals.first > 0) append("支 ¥${Format.money(totals.first)}")
-            if (totals.second > 0) {
+            if (day.expense > 0) append("支 ¥${Format.money(day.expense)}")
+            if (day.income > 0) {
                 if (isNotEmpty()) append("  ")
-                append("收 ¥${Format.money(totals.second)}")
+                append("收 ¥${Format.money(day.income)}")
             }
         }
         Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -332,69 +289,78 @@ private fun DayHeader(day: String, transactions: List<Transaction>) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BillItem(
+private fun BillRow(
     transaction: Transaction,
     categoryMap: Map<Long, Category>,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val category = transaction.categoryId?.let { categoryMap[it] }
-    val parent = category?.parentId?.let { categoryMap[it] }
+    val category = transaction.categoryId?.let(categoryMap::get)
+    val parent = category?.parentId?.let(categoryMap::get)
     val icon = parent?.icon ?: category?.icon ?: "📝"
     val label = category?.name ?: "未分类"
     val parentLabel = parent?.name
-    val isIncome = transaction.type in InflowTypes
+    val inflow = transaction.type in InflowTypes
+    val amountColor = when (transaction.type) {
+        "refund", "reimbursement" -> AmountColors.Refund
+        "income" -> AmountColors.Income
+        else -> MaterialTheme.colorScheme.onSurface
+    }
 
-    LedgerCard(
+    Column(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isIncome) AmountColors.Income.copy(alpha = 0.11f)
-                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(icon, fontSize = 19.sp)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (parentLabel != null) "$parentLabel · $label" else label,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = buildString {
-                        append(Format.timeOf(transaction.date))
-                        if (!transaction.remark.isNullOrBlank()) append(" · ${transaction.remark}")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-            Spacer(Modifier.width(10.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(
+                    if (inflow) AmountColors.Income.copy(alpha = 0.11f)
+                    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(icon, fontSize = 18.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = (if (isIncome) "+" else "-") + "¥" + Format.money(transaction.amount),
-                color = when (transaction.type) {
-                    "refund", "reimbursement" -> AmountColors.Refund
-                    "income" -> AmountColors.Income
-                    else -> MaterialTheme.colorScheme.onSurface
+                if (parentLabel != null) "$parentLabel · $label" else label,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                buildString {
+                    append(Format.timeOf(transaction.date))
+                    if (!transaction.remark.isNullOrBlank()) append(" · ${transaction.remark}")
                 },
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
             )
         }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            (if (inflow) "+" else "-") + "¥" + Format.money(transaction.amount),
+            color = amountColor,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp
+        )
+    }
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 70.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+    )
     }
 }
 

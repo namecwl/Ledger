@@ -20,3 +20,6 @@
 - 数据库已移除破坏性迁移，并补齐 `1 -> 2` 显式迁移。
 - 要保证 Android 允许覆盖安装，发布 APK 必须始终使用同一个签名证书。
 - 签名与自动发布配置见 `docs/UPDATE_AND_SIGNING.md`。
+## 性能版本
+
+GitHub Actions 会生成 `Ledger-Performance-APK`。该版本关闭 debuggable、启用 R8 和资源压缩，适合日常安装体验。不要再使用未优化的 `app-debug.apk` 评价流畅度。
