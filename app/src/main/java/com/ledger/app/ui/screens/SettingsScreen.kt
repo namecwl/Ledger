@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
@@ -187,6 +188,26 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
                     title = "无障碍服务",
                     subtitle = "从支付页面辅助识别账单",
                     onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                SettingRow(
+                    icon = Icons.Default.BatteryFull,
+                    title = "后台保活",
+                    subtitle = "允许后台运行/忽略电池优化，防止服务被自动关闭",
+                    onClick = {
+                        val power = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                        val intent = if (!power.isIgnoringBatteryOptimizations(context.packageName)) {
+                            android.content.Intent(
+                                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                android.net.Uri.parse("package:${context.packageName}")
+                            )
+                        } else {
+                            android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        }
+                        runCatching { context.startActivity(intent) }.onFailure {
+                            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS)) }
+                        }
+                    }
                 )
             }
         }

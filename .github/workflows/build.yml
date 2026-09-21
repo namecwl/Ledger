@@ -27,6 +27,27 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Ensure fixed signing keystore
+        shell: bash
+        run: |
+          set -e
+          mkdir -p app/keystore
+          if [ ! -f app/keystore/ledger.jks ]; then
+            echo "仓库中尚无固定密钥，生成并提交一次，之后所有构建复用同一签名"
+            keytool -genkeypair -v \
+              -keystore app/keystore/ledger.jks \
+              -storepass ledger123 -keypass ledger123 \
+              -alias ledger -keyalg RSA -keysize 2048 -validity 10950 \
+              -dname "CN=Ledger, OU=dev, O=namecwl, L=Maanshan, ST=Anhui, C=CN"
+            git config user.name "namecwl"
+            git config user.email "namecwl@users.noreply.github.com"
+            git add app/keystore/ledger.jks
+            git commit -m "chore: 添加固定签名密钥 [skip ci]"
+            git push
+          else
+            echo "固定签名密钥已存在，直接使用"
+          fi
+
       - name: Build Debug APK
         run: gradle assembleDebug --no-daemon
 

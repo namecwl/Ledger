@@ -11,6 +11,12 @@ val releaseStorePassword = System.getenv("LEDGER_KEYSTORE_PASSWORD")
 val releaseKeyAlias = System.getenv("LEDGER_KEY_ALIAS")
 val releaseKeyPassword = System.getenv("LEDGER_KEY_PASSWORD")
 
+// 随仓库提交的固定签名密钥，保证每次 CI 构建签名一致、新版本可直接覆盖安装
+val fixedKeystore = file("keystore/ledger.jks")
+val fixedStorePassword = "ledger123"
+val fixedKeyAlias = "ledger"
+val fixedKeyPassword = "ledger123"
+
 android {
     namespace = "com.ledger.app"
     compileSdk = 34
@@ -19,12 +25,20 @@ android {
         applicationId = "com.ledger.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.5.0"
+        versionCode = 5
+        versionName = "1.5.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
     signingConfigs {
+        if (fixedKeystore.exists()) {
+            create("fixed") {
+                storeFile = fixedKeystore
+                storePassword = fixedStorePassword
+                keyAlias = fixedKeyAlias
+                keyPassword = fixedKeyPassword
+            }
+        }
         if (!releaseStoreFile.isNullOrBlank()) {
             create("release") {
                 storeFile = file(releaseStoreFile)
@@ -36,10 +50,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            // debug 也用固定签名，避免 debug/performance 互换或升级时签名冲突
+            signingConfigs.findByName("fixed")?.let { signingConfig = it }
+        }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            signingConfig = signingConfigs.findByName("fixed")
+                ?: signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -51,7 +71,9 @@ android {
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("fixed")
+                ?: signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
