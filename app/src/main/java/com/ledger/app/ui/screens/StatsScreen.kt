@@ -136,7 +136,7 @@ fun StatsScreen(vm: MainViewModel) {
             )
         }
         item(key = "summary", contentType = "summary") {
-            StatsSummaryCard(periodWord = periodWord, expense = expenseTotal, income = income, balance = balance)
+            StatsSummaryCard(periodWord = periodWord, expense = expenseTotal, income = incomeTotal, balance = balance)
         }
         item(key = "chart", contentType = "chart") {
             BreakdownChartCard(stats = categoryStats, expenseTotal = expenseTotal)
