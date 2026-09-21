@@ -82,7 +82,7 @@ class NotificationListener : NotificationListenerService() {
                         context = applicationContext,
                         amount = amount,
                         kind = parsed.kind,
-                        sourceLabel = "$label通知"
+                        sourceLabel = "${label}通知"
                     )
                 } catch (throwable: Throwable) {
                     Log.e(TAG, "写入待确认账单失败", throwable)

@@ -102,7 +102,7 @@ class PaymentAccessibilityService : AccessibilityService() {
                         context = applicationContext,
                         amount = amount,
                         kind = parsed.kind,
-                        sourceLabel = "$label页面"
+                        sourceLabel = "${label}页面"
                     )
                 } catch (throwable: Throwable) {
                     Log.e(TAG, "写入待确认账单失败", throwable)
