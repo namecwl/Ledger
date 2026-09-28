@@ -391,6 +391,8 @@ private fun SettingRow(
             modifier = Modifier.size(16.dp)
         )
     }
+}
+
 private fun openNotificationSettings(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         val component = ComponentName(context, com.ledger.app.service.NotificationListener::class.java)
