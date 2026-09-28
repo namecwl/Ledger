@@ -57,7 +57,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ledger.app.BuildConfig
-import com.ledger.app.service.PaymentAccessibilityService
 import com.ledger.app.ui.components.LedgerCard
 import com.ledger.app.ui.components.LedgerIcon
 import com.ledger.app.ui.components.ScreenHeader
@@ -404,9 +403,6 @@ private fun openNotificationSettings(context: Context) {
 }
 
 private fun openAccessibilitySettings(context: Context) {
-    val component = ComponentName(context, PaymentAccessibilityService::class.java)
-    val detail = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS)
-        .putExtra(Intent.EXTRA_COMPONENT_NAME, component)
-    if (runCatching { context.startActivity(detail) }.isSuccess) return
+    // 打开系统无障碍设置页（可点入本应用服务开启开关，Android 13+ 可在此开启“允许受限设置”）
     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 }
