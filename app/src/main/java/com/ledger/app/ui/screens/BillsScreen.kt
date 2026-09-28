@@ -2,7 +2,6 @@ package com.ledger.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,10 +24,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -39,7 +40,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,22 +64,22 @@ import com.ledger.app.ui.theme.AmountColors
 import com.ledger.app.util.Format
 import com.ledger.app.vm.BillDayUi
 import com.ledger.app.vm.MainViewModel
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.YearMonth
-import java.time.ZoneId
 
 private val InflowTypes = setOf("income", "refund", "reimbursement")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun BillsScreen(vm: MainViewModel) {
+fun BillsScreen(
+    vm: MainViewModel,
+    onPending: () -> Unit,
+    onSettings: () -> Unit
+) {
     val categories by vm.categories.collectAsStateWithLifecycle()
     val bills by vm.billsUi.collectAsStateWithLifecycle()
     val currentMonth by vm.selectedMonth.collectAsStateWithLifecycle()
     val budgetState by vm.budgetState.collectAsStateWithLifecycle()
+    val pendingCount by vm.pendingCount.collectAsStateWithLifecycle()
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val days = bills.days
@@ -99,9 +99,29 @@ fun BillsScreen(vm: MainViewModel) {
                 title = "账单",
                 subtitle = "每一笔收支，都清晰可见",
                 trailing = {
-                    if (currentMonth != YearMonth.now()) {
-                        IconButton(onClick = { vm.selectMonth(YearMonth.now()) }) {
-                            Icon(Icons.Default.Today, contentDescription = "回到本月", tint = MaterialTheme.colorScheme.primary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (currentMonth != YearMonth.now()) {
+                            IconButton(onClick = { vm.selectMonth(YearMonth.now()) }) {
+                                Icon(
+                                    Icons.Default.Today,
+                                    contentDescription = "回到本月",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        IconButton(onClick = onPending) {
+                            BadgedBox(
+                                badge = {
+                                    if (pendingCount > 0) {
+                                        Badge { Text(if (pendingCount > 99) "99+" else "$pendingCount") }
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.Notifications, contentDescription = "待确认")
+                            }
+                        }
+                        IconButton(onClick = onSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "设置")
                         }
                     }
                 }
@@ -219,57 +239,75 @@ private fun MonthNavigator(
 @Composable
 private fun SummaryHero(month: YearMonth, expense: Double, income: Double) {
     val balance = income - expense
-    Box(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .clip(MaterialTheme.shapes.extraLarge)
-            .background(
-                Brush.linearGradient(
-                    listOf(MaterialTheme.colorScheme.primary, Color(0xFF0C7D51))
-                )
-            )
-            .padding(horizontal = 20.dp, vertical = 20.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 1.dp
     ) {
-        Column {
-            Text(
-                "${month.monthValue}月结余",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.76f)
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "¥${Format.money(balance)}",
-                style = MaterialTheme.typography.displaySmall,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(18.dp))
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "${month.monthValue}月结余",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        "¥${Format.money(balance)}",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        "${month.year}年",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SummaryMetric("支出", expense, Modifier.weight(1f))
-                SummaryMetric("收入", income, Modifier.weight(1f))
+                SummaryMetric("支出", expense, AmountColors.Expense, Modifier.weight(1f))
+                SummaryMetric("收入", income, AmountColors.Income, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun SummaryMetric(label: String, amount: Double, modifier: Modifier = Modifier) {
+private fun SummaryMetric(
+    label: String,
+    amount: Double,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.12f))
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(3.dp))
-        Text("¥${Format.money(amount)}", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text("¥${Format.money(amount)}", style = MaterialTheme.typography.titleMedium, color = color)
     }
 }
-
 @Composable
 private fun DayHeader(day: BillDayUi) {
     Row(
@@ -384,44 +422,11 @@ private fun BillEditDialog(
     var amountText by remember { mutableStateOf(transaction.amount.toString()) }
     var remark by remember { mutableStateOf(transaction.remark ?: "") }
     var selectedCategory by remember { mutableStateOf(transaction.categoryId) }
-    val initialDate = remember(transaction.id) {
-        runCatching { LocalDate.parse(transaction.date.take(10)) }.getOrDefault(LocalDate.now())
-    }
-    var pickedDate by remember(transaction.id) { mutableStateOf(initialDate) }
-    var showDatePicker by remember { mutableStateOf(false) }
     val tops = remember(categories, transaction.type) {
         categories.filter { it.parentId == null && it.type == transaction.type }
     }
     val subs = remember(categories, selectedCategory) {
         categories.filter { it.parentId == selectedCategory }
-    }
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = pickedDate
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val millis = datePickerState.selectedDateMillis
-                    if (millis != null) {
-                        pickedDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                    }
-                    showDatePicker = false
-                }) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
     }
 
     AlertDialog(
@@ -435,22 +440,6 @@ private fun BillEditDialog(
                     label = { Text("金额") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = pickedDate.toString(),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("日期") },
-                    singleLine = true,
-                    trailingIcon = {
-                        IconButton(onClick = { showDatePicker = true }) {
-                            Icon(Icons.Default.Today, contentDescription = "选择日期")
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDatePicker = true }
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -495,17 +484,9 @@ private fun BillEditDialog(
         confirmButton = {
             TextButton(onClick = {
                 val amount = amountText.toDoubleOrNull() ?: return@TextButton
-                val originalTime = if (transaction.date.length >= 19) {
-                    runCatching { LocalTime.parse(transaction.date.substring(11, 19)) }
-                        .getOrDefault(LocalTime.MIDNIGHT)
-                } else {
-                    LocalTime.MIDNIGHT
-                }
-                val newDateIso = Format.iso(LocalDateTime.of(pickedDate, originalTime))
                 onConfirm(
                     transaction.copy(
                         amount = amount,
-                        date = newDateIso,
                         remark = remark.ifBlank { null },
                         categoryId = selectedCategory,
                         updatedAt = Format.nowIso()

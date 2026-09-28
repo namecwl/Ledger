@@ -56,7 +56,10 @@ import com.ledger.app.vm.MainViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PendingScreen(vm: MainViewModel) {
+fun PendingScreen(
+    vm: MainViewModel,
+    onBack: () -> Unit
+) {
     val pendingTransactions by vm.pendingList.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
@@ -71,6 +74,7 @@ fun PendingScreen(vm: MainViewModel) {
         item(key = "header", contentType = "screen_header") {
             ScreenHeader(
                 title = "待确认",
+                onBack = onBack,
                 subtitle = if (pendingTransactions.isEmpty()) "自动记账结果会出现在这里" else "${pendingTransactions.size} 笔记录等待确认"
             )
         }
@@ -121,7 +125,6 @@ private fun PendingItem(
     val sourceLabel = when (pending.source) {
         "notification" -> "通知"
         "accessibility" -> "无障碍"
-        "test" -> "测试"
         else -> "自动识别"
     }
 
@@ -207,11 +210,19 @@ private fun ConfirmDialog(
     var selectedCategory by remember {
         mutableStateOf(categories.firstOrNull { it.name == "其他" }?.id)
     }
-    var selectedAccount by remember { mutableStateOf(accounts.firstOrNull()?.id) }
-    val txType = pending.parsedType ?: "expense"
-    val tops = remember(categories, txType) {
-        categories.filter { it.parentId == null && it.type == txType }
-            .ifEmpty { categories.filter { it.parentId == null && it.type == "expense" } }
+    var selectedAccount by remember {
+        val preferredName = when {
+            pending.rawText.contains("微信") -> "微信"
+            pending.rawText.contains("支付宝") -> "支付宝"
+            else -> null
+        }
+        mutableStateOf(
+            preferredName?.let { name -> accounts.firstOrNull { it.name == name }?.id }
+                ?: accounts.firstOrNull()?.id
+        )
+    }
+    val tops = remember(categories) {
+        categories.filter { it.parentId == null && it.type == "expense" }
     }
     val subs = remember(categories, selectedCategory) {
         categories.filter { it.parentId == selectedCategory }

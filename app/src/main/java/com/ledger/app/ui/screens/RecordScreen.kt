@@ -91,6 +91,7 @@ fun RecordScreen(vm: MainViewModel) {
     var pickedDateTime by remember { mutableStateOf(LocalDateTime.now()) }
     var showRemarkDialog by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
+    var showSubcategories by remember { mutableStateOf(false) }
 
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -159,6 +160,7 @@ fun RecordScreen(vm: MainViewModel) {
                     TypeSwitch(current = type, onSelect = {
                         type = it
                         selectedSub = null
+                        showSubcategories = false
                     })
                     Spacer(Modifier.weight(1f))
                     Text(
@@ -208,8 +210,8 @@ fun RecordScreen(vm: MainViewModel) {
                 Spacer(Modifier.height(8.dp))
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     tops.forEach { category ->
                         CategoryCell(
@@ -218,29 +220,35 @@ fun RecordScreen(vm: MainViewModel) {
                             onClick = {
                                 selectedTop = category.id
                                 selectedSub = null
+                                showSubcategories = false
                             }
                         )
                     }
                 }
 
                 if (subs.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "子分类",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(7.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            showSubcategories = !showSubcategories
+                            if (!showSubcategories) selectedSub = null
+                        }
                     ) {
-                        subs.forEach { subcategory ->
-                            FilterChip(
-                                selected = selectedSub == subcategory.id,
-                                onClick = { selectedSub = subcategory.id },
-                                label = { Text(subcategory.name) }
-                            )
+                        Text(if (showSubcategories) "收起细分类" else "添加细分类（可选）")
+                    }
+                    if (showSubcategories) {
+                        Spacer(Modifier.height(2.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            subs.forEach { subcategory ->
+                                FilterChip(
+                                    selected = selectedSub == subcategory.id,
+                                    onClick = { selectedSub = subcategory.id },
+                                    label = { Text(subcategory.name) }
+                                )
+                            }
                         }
                     }
                 }
@@ -442,7 +450,7 @@ private fun CategoryCell(category: Category, selected: Boolean, onClick: () -> U
             .clip(RoundedCornerShape(15.dp))
             .clickable(onClick = onClick)
             .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.66f)
+                if (selected) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
             .padding(vertical = 8.dp),
@@ -453,8 +461,8 @@ private fun CategoryCell(category: Category, selected: Boolean, onClick: () -> U
                 .size(46.dp)
                 .clip(CircleShape)
                 .background(
-                    if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.surface
+                    if (selected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant
                 ),
             contentAlignment = Alignment.Center
         ) {

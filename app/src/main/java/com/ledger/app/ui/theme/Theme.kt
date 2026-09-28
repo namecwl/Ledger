@@ -15,95 +15,95 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF16A36A),
+    primary = Color(0xFF2F80ED),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDDF6E9),
-    onPrimaryContainer = Color(0xFF075C3B),
-    inversePrimary = Color(0xFF69D9A5),
-    secondary = Color(0xFF3E6B58),
+    primaryContainer = Color(0xFFE7F0FF),
+    onPrimaryContainer = Color(0xFF123F8C),
+    inversePrimary = Color(0xFF8BB8FF),
+    secondary = Color(0xFF18A76D),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCEBE3),
-    onSecondaryContainer = Color(0xFF173B2D),
-    tertiary = Color(0xFFF08C45),
+    secondaryContainer = Color(0xFFE3F6ED),
+    onSecondaryContainer = Color(0xFF075A38),
+    tertiary = Color(0xFFF29A45),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFFFE5D2),
-    onTertiaryContainer = Color(0xFF6A2C00),
-    background = Color(0xFFF4F7F5),
-    onBackground = Color(0xFF18201C),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF18201C),
-    surfaceVariant = Color(0xFFEDF3EF),
-    onSurfaceVariant = Color(0xFF68756E),
-    outline = Color(0xFFCAD5CF),
-    outlineVariant = Color(0xFFE3EAE6),
-    error = Color(0xFFE85D55),
+    tertiaryContainer = Color(0xFFFFEBD8),
+    onTertiaryContainer = Color(0xFF6A3200),
+    background = Color(0xFFF6F7F9),
+    onBackground = Color(0xFF171A1F),
+    surface = Color.White,
+    onSurface = Color(0xFF171A1F),
+    surfaceVariant = Color(0xFFF1F3F5),
+    onSurfaceVariant = Color(0xFF858B95),
+    outline = Color(0xFFE1E4E8),
+    outlineVariant = Color(0xFFEFF1F3),
+    error = Color(0xFFF25B57),
     onError = Color.White,
-    errorContainer = Color(0xFFFFE2DF),
-    onErrorContainer = Color(0xFF6E1512),
+    errorContainer = Color(0xFFFFE8E7),
+    onErrorContainer = Color(0xFF711B18),
     scrim = Color(0x99000000)
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF6DDBA8),
-    onPrimary = Color(0xFF003824),
-    primaryContainer = Color(0xFF075538),
-    onPrimaryContainer = Color(0xFFB7F5D7),
-    inversePrimary = Color(0xFF16A36A),
-    secondary = Color(0xFFB6CEBF),
-    onSecondary = Color(0xFF20372C),
-    secondaryContainer = Color(0xFF354D40),
-    onSecondaryContainer = Color(0xFFD2E9DB),
+    primary = Color(0xFF8BB8FF),
+    onPrimary = Color(0xFF003063),
+    primaryContainer = Color(0xFF164A88),
+    onPrimaryContainer = Color(0xFFD8E7FF),
+    inversePrimary = Color(0xFF2F80ED),
+    secondary = Color(0xFF72D7A9),
+    onSecondary = Color(0xFF003823),
+    secondaryContainer = Color(0xFF075538),
+    onSecondaryContainer = Color(0xFFB7F5D7),
     tertiary = Color(0xFFFFB77D),
     onTertiary = Color(0xFF542B00),
     tertiaryContainer = Color(0xFF783F00),
     onTertiaryContainer = Color(0xFFFFDCC2),
-    background = Color(0xFF101613),
-    onBackground = Color(0xFFE1E8E4),
-    surface = Color(0xFF171E1A),
-    onSurface = Color(0xFFE1E8E4),
-    surfaceVariant = Color(0xFF26312B),
-    onSurfaceVariant = Color(0xFFB8C5BE),
-    outline = Color(0xFF46534C),
-    outlineVariant = Color(0xFF2D3933),
-    error = Color(0xFFFF7B73),
-    onError = Color(0xFF410003),
+    background = Color(0xFF101214),
+    onBackground = Color(0xFFE8EAED),
+    surface = Color(0xFF191C1F),
+    onSurface = Color(0xFFE8EAED),
+    surfaceVariant = Color(0xFF25292E),
+    onSurfaceVariant = Color(0xFFB6BBC3),
+    outline = Color(0xFF3D4249),
+    outlineVariant = Color(0xFF2A2E33),
+    error = Color(0xFFFF7B76),
+    onError = Color(0xFF4A0503),
     errorContainer = Color(0xFF6E1512),
-    onErrorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFFFFDAD7),
     scrim = Color(0xCC000000)
 )
 
 private val LedgerTypography = Typography(
     displaySmall = TextStyle(
-        fontSize = 36.sp,
-        lineHeight = 42.sp,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.5).sp
     ),
     headlineLarge = TextStyle(
-        fontSize = 30.sp,
-        lineHeight = 36.sp,
+        fontSize = 29.sp,
+        lineHeight = 35.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.3).sp
     ),
     headlineMedium = TextStyle(
-        fontSize = 26.sp,
-        lineHeight = 32.sp,
+        fontSize = 25.sp,
+        lineHeight = 31.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.2).sp
     ),
     headlineSmall = TextStyle(
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        fontWeight = FontWeight.SemiBold
-    ),
-    titleLarge = TextStyle(
-        fontSize = 20.sp,
+        fontSize = 21.sp,
         lineHeight = 27.sp,
         fontWeight = FontWeight.SemiBold
     ),
+    titleLarge = TextStyle(
+        fontSize = 19.sp,
+        lineHeight = 26.sp,
+        fontWeight = FontWeight.SemiBold
+    ),
     titleMedium = TextStyle(
-        fontSize = 17.sp,
-        lineHeight = 23.sp,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
         fontWeight = FontWeight.SemiBold
     ),
     titleSmall = TextStyle(
@@ -144,20 +144,20 @@ private val LedgerTypography = Typography(
 )
 
 private val LedgerShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(14.dp),
+    extraLarge = RoundedCornerShape(18.dp)
 )
 
 /** 支出、收入、退款等金额语义色。 */
 object AmountColors {
-    val Expense = Color(0xFFE85D55)
-    val Income = Color(0xFF16A36A)
-    val Refund = Color(0xFF4E7DF2)
-    val Transfer = Color(0xFF8B949E)
-    val Warning = Color(0xFFF09A3E)
+    val Expense = Color(0xFFF25B57)
+    val Income = Color(0xFF18A76D)
+    val Refund = Color(0xFF3478F6)
+    val Transfer = Color(0xFF8A909B)
+    val Warning = Color(0xFFF29A45)
 }
 
 @Composable

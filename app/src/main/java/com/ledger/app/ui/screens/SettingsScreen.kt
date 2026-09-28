@@ -1,14 +1,15 @@
 package com.ledger.app.ui.screens
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
@@ -47,8 +47,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -59,12 +57,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ledger.app.BuildConfig
-import com.ledger.app.data.entity.PendingTransaction
-import com.ledger.app.service.ServiceStatus
+import com.ledger.app.service.PaymentAccessibilityService
 import com.ledger.app.ui.components.LedgerCard
 import com.ledger.app.ui.components.LedgerIcon
 import com.ledger.app.ui.components.ScreenHeader
 import com.ledger.app.ui.components.SectionTitle
+import com.ledger.app.util.AutomationStatus
 import com.ledger.app.util.BackupManager
 import com.ledger.app.util.Format
 import com.ledger.app.util.QianjiImporter
@@ -74,26 +72,30 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SettingsScreen(nav: NavController, vm: MainViewModel) {
+fun SettingsScreen(
+    nav: NavController,
+    vm: MainViewModel,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val monthlyBudget by vm.monthlyBudget.collectAsStateWithLifecycle()
-    val pendingCount by vm.pendingCount.collectAsStateWithLifecycle()
     var showBudgetDialog by remember { mutableStateOf(false) }
-
-    // 每次回到设置页都重新读取三项授权的实时状态
-    var statusTick by remember { mutableStateOf(0) }
+    var showAccessibilityGuide by remember { mutableStateOf(false) }
+    var accessibilityEnabled by remember { mutableStateOf(AutomationStatus.isAccessibilityEnabled(context)) }
+    var notificationEnabled by remember { mutableStateOf(AutomationStatus.isNotificationListenerEnabled(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) statusTick++
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accessibilityEnabled = AutomationStatus.isAccessibilityEnabled(context)
+                notificationEnabled = AutomationStatus.isNotificationListenerEnabled(context)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val notificationOn = remember(statusTick) { ServiceStatus.notificationListenerEnabled(context) }
-    val accessibilityOn = remember(statusTick) { ServiceStatus.accessibilityEnabled(context) }
-    val batteryOn = remember(statusTick) { ServiceStatus.batteryOptimizationIgnored(context) }
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 
@@ -157,7 +159,7 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
         contentPadding = PaddingValues(bottom = 28.dp)
     ) {
         item(key = "header") {
-            ScreenHeader(title = "设置", subtitle = "让记账更顺手")
+            ScreenHeader(title = "设置", subtitle = "让记账更顺手", onBack = onBack)
         }
 
         item(key = "budget_title") { SectionTitle("预算") }
@@ -184,7 +186,7 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
                 SettingRow(
                     icon = Icons.Default.Settings,
                     title = "分类管理",
-                    subtitle = "增删改一级、二级分类",
+                    subtitle = "默认精简，按需添加细分类",
                     onClick = { nav.navigate("category_manage") }
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -198,34 +200,6 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
         }
 
         item(key = "auto_title") { SectionTitle("自动记账") }
-        item(key = "auto_status") {
-            AutoBookkeepingStatusCard(
-                notificationOn = notificationOn,
-                accessibilityOn = accessibilityOn,
-                batteryOn = batteryOn,
-                pendingCount = pendingCount,
-                onTest = {
-                    scope.launch {
-                        val now = Format.nowIso()
-                        (context.applicationContext as com.ledger.app.LedgerApp).db
-                            .pendingDao().insert(
-                                PendingTransaction(
-                                    source = "test",
-                                    rawText = "自动记账链路测试",
-                                    parsedAmount = 0.01,
-                                    parsedMerchant = "自动记账测试",
-                                    parsedDate = now,
-                                    parsedType = "expense",
-                                    confidence = 0.99,
-                                    status = "pending",
-                                    createdAt = now
-                                )
-                            )
-                        toast("已生成测试记录，请到「待确认」查看")
-                    }
-                }
-            )
-        }
         item(key = "auto_group") {
             LedgerCard(
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -234,35 +208,15 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
                 SettingRow(
                     icon = Icons.Default.Notifications,
                     title = "通知监听",
-                    subtitle = "读取支付通知并生成待确认账单",
-                    onClick = { context.startActivity(android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
+                    subtitle = if (notificationEnabled) "已开启 · 识别支付宝 / 微信支付通知" else "未开启 · 点击前往系统授权",
+                    onClick = { openNotificationSettings(context) }
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 SettingRow(
                     icon = Icons.Default.Accessibility,
                     title = "无障碍服务",
-                    subtitle = "从支付页面辅助识别账单",
-                    onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                )
-                HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                SettingRow(
-                    icon = Icons.Default.BatteryFull,
-                    title = "后台保活",
-                    subtitle = "允许后台运行/忽略电池优化，防止服务被自动关闭",
-                    onClick = {
-                        val power = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-                        val intent = if (!power.isIgnoringBatteryOptimizations(context.packageName)) {
-                            android.content.Intent(
-                                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                android.net.Uri.parse("package:${context.packageName}")
-                            )
-                        } else {
-                            android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                        }
-                        runCatching { context.startActivity(intent) }.onFailure {
-                            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS)) }
-                        }
-                    }
+                    subtitle = if (accessibilityEnabled) "已开启 · 识别支付宝 / 微信支付结果页" else "未开启 · 点击直达授权页",
+                    onClick = { showAccessibilityGuide = true }
                 )
             }
         }
@@ -375,7 +329,30 @@ fun SettingsScreen(nav: NavController, vm: MainViewModel) {
             }
         )
     }
-}
+    if (showAccessibilityGuide) {
+        AlertDialog(
+            onDismissRequest = { showAccessibilityGuide = false },
+            title = { Text("开启支付结果识别") },
+            text = {
+                Column {
+                    Text("1. 在系统页找到“记账 · 支付结果识别”");
+                    Spacer(Modifier.height(6.dp))
+                    Text("2. 打开开关并确认系统提示");
+                    Spacer(Modifier.height(6.dp))
+                    Text("3. 如果开关灰色或提示受限，请到“应用信息”右上角开启“允许受限设置”后再试")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAccessibilityGuide = false
+                    openAccessibilitySettings(context)
+                }) { Text("去开启") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccessibilityGuide = false }) { Text("取消") }
+            }
+        )
+    }}
 
 object ImportHolder {
     var records: List<com.ledger.app.util.QianjiRecord> = emptyList()
@@ -414,67 +391,20 @@ private fun SettingRow(
             modifier = Modifier.size(16.dp)
         )
     }
+private fun openNotificationSettings(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val component = ComponentName(context, com.ledger.app.service.NotificationListener::class.java)
+        val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+            .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component.flattenToString())
+        if (runCatching { context.startActivity(detail) }.isSuccess) return
+    }
+    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
 }
 
-@Composable
-private fun AutoBookkeepingStatusCard(
-    notificationOn: Boolean,
-    accessibilityOn: Boolean,
-    batteryOn: Boolean,
-    pendingCount: Int,
-    onTest: () -> Unit
-) {
-    LedgerCard(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("自动记账运行状态", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Text(
-                "待确认 $pendingCount 笔",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        StatusLine("通知监听", notificationOn)
-        StatusLine("无障碍服务", accessibilityOn)
-        StatusLine("后台保活", batteryOn)
-        Spacer(Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = onTest) { Text("发送测试记录") }
-        }
-    }
-}
-
-@Composable
-private fun StatusLine(label: String, enabled: Boolean) {
-    val color = if (enabled) {
-        Color(0xFF2E9E5B)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier
-                .size(9.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-        Spacer(Modifier.size(7.dp))
-        Text(
-            if (enabled) "已开启" else "未开启",
-            style = MaterialTheme.typography.labelMedium,
-            color = color
-        )
-    }
+private fun openAccessibilitySettings(context: Context) {
+    val component = ComponentName(context, PaymentAccessibilityService::class.java)
+    val detail = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS)
+        .putExtra(Intent.EXTRA_COMPONENT_NAME, component)
+    if (runCatching { context.startActivity(detail) }.isSuccess) return
+    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 }

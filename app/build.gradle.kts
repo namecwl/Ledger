@@ -11,12 +11,6 @@ val releaseStorePassword = System.getenv("LEDGER_KEYSTORE_PASSWORD")
 val releaseKeyAlias = System.getenv("LEDGER_KEY_ALIAS")
 val releaseKeyPassword = System.getenv("LEDGER_KEY_PASSWORD")
 
-// 随仓库提交的固定签名密钥，保证每次 CI 构建签名一致、新版本可直接覆盖安装
-val fixedKeystore = file("keystore/ledger.jks")
-val fixedStorePassword = "ledger123"
-val fixedKeyAlias = "ledger"
-val fixedKeyPassword = "ledger123"
-
 android {
     namespace = "com.ledger.app"
     compileSdk = 34
@@ -25,18 +19,20 @@ android {
         applicationId = "com.ledger.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.5.2"
+        versionCode = 7
+        versionName = "1.6.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
     signingConfigs {
+        // 优先使用仓库内固定签名（v1.5.1 起），保证所有版本同一签名、可覆盖安装
+        val fixedKeystore = rootProject.file("app/keystore/ledger.jks")
         if (fixedKeystore.exists()) {
             create("fixed") {
                 storeFile = fixedKeystore
-                storePassword = fixedStorePassword
-                keyAlias = fixedKeyAlias
-                keyPassword = fixedKeyPassword
+                storePassword = "ledger123"
+                keyAlias = "ledger"
+                keyPassword = "ledger123"
             }
         }
         if (!releaseStoreFile.isNullOrBlank()) {
@@ -51,15 +47,14 @@ android {
 
     buildTypes {
         debug {
-            // debug 也用固定签名，避免 debug/performance 互换或升级时签名冲突
-            signingConfigs.findByName("fixed")?.let { signingConfig = it }
+            signingConfig = signingConfigs.findByName("fixed") ?: signingConfigs.getByName("debug")
         }
-
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.findByName("fixed")
                 ?: signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

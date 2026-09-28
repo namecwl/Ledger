@@ -32,4 +32,10 @@ interface PendingTransactionDao {
 
     @Query("SELECT COUNT(*) FROM pending_transactions WHERE status = 'pending'")
     suspend fun countPending(): Int
+    @Query(
+        "SELECT COUNT(*) FROM pending_transactions " +
+            "WHERE status = 'pending' AND parsedAmount = :amount AND createdAt >= :since " +
+            "AND (parsedMerchant = :merchant OR parsedMerchant IS NULL OR :merchant IS NULL)"
+    )
+    suspend fun countRecentMatches(amount: Double, merchant: String?, since: String): Int
 }

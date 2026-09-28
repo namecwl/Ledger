@@ -15,24 +15,23 @@ object CategorySeeder {
     )
 
     private val expense = listOf(
-        Seed("餐饮", listOf("三餐", "零食", "饮料", "水果", "聚餐", "外卖"), "expense", "🍜"),
-        Seed("购物", listOf("日用品", "服饰", "数码", "美妆", "家居", "其他"), "expense", "🛍️"),
-        Seed("交通", listOf("公交地铁", "打车", "火车", "飞机", "加油停车", "单车"), "expense", "🚗"),
-        Seed("居住", listOf("房租", "水费", "电费", "燃气", "网费", "物业", "维修"), "expense", "🏠"),
-        Seed("通讯", listOf("话费", "宽带"), "expense", "📱"),
-        Seed("医疗健康", listOf("药品", "就诊", "体检", "健身"), "expense", "💊"),
-        Seed("学习", listOf("书籍", "考试", "课程", "文具"), "expense", "📚"),
-        Seed("娱乐", listOf("游戏", "电影", "门票", "旅行", "酒店", "休闲"), "expense", "🎮"),
-        Seed("人情", listOf("红包", "礼物", "请客", "借钱"), "expense", "🎁"),
-        Seed("其他", listOf("理发", "日常", "意外损失", "其他"), "expense", "📦")
+        Seed("餐饮", listOf("三餐", "外卖", "饮品零食"), "expense", "🍜"),
+        Seed("交通", listOf("公交地铁", "打车", "加油停车"), "expense", "🚗"),
+        Seed("购物", listOf("日用品", "服饰", "数码"), "expense", "🛍️"),
+        Seed("居住", listOf("房租房贷", "水电燃气", "物业维修"), "expense", "🏠"),
+        Seed("娱乐", listOf("电影游戏", "旅行", "其他娱乐"), "expense", "🎮"),
+        Seed("医疗", listOf("药品", "就诊"), "expense", "💊"),
+        Seed("学习", listOf("书籍", "课程"), "expense", "📚"),
+        Seed("人情", listOf("红包", "礼物"), "expense", "🎁"),
+        Seed("其他", emptyList(), "expense", "📦")
     )
 
     private val income = listOf(
-        Seed("职业收入", listOf("工资", "奖金", "兼职"), "income", "💰"),
-        Seed("家庭支持", listOf("生活费", "红包"), "income", "👨‍👩‍👧"),
+        Seed("工资", emptyList(), "income", "💰"),
+        Seed("兼职奖金", listOf("兼职", "奖金"), "income", "💼"),
+        Seed("红包", emptyList(), "income", "🧧"),
         Seed("退款报销", listOf("退款", "报销"), "income", "🔄"),
-        Seed("收回借出", listOf("还款"), "income", "💸"),
-        Seed("其他收入", listOf("本月结余", "其他"), "income", "📥")
+        Seed("其他收入", emptyList(), "income", "📥")
     )
 
     suspend fun seedIfEmpty(db: AppDatabase) {

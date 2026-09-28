@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -37,7 +38,8 @@ fun LedgerCard(
     color: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     contentPadding: PaddingValues = PaddingValues(16.dp),
-    border: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    border: BorderStroke? = null,
+    shadowElevation: Dp = 1.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -45,7 +47,8 @@ fun LedgerCard(
         shape = MaterialTheme.shapes.large,
         color = color,
         contentColor = contentColor,
-        border = border
+        border = border,
+        shadowElevation = shadowElevation
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
@@ -64,7 +67,7 @@ fun ScreenHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = if (onBack == null) 20.dp else 6.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
+            .padding(start = if (onBack == null) 18.dp else 4.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {
@@ -100,7 +103,7 @@ fun SectionTitle(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -123,7 +126,7 @@ fun LedgerIcon(
 ) {
     Box(
         modifier = modifier
-            .size(42.dp)
+            .size(38.dp)
             .background(containerColor, CircleShape),
         contentAlignment = Alignment.Center
     ) {
@@ -168,3 +171,4 @@ fun EmptyState(
         )
     }
 }
+
